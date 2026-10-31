@@ -80,8 +80,25 @@ class DiscountLinesTest extends TestCase
         $this->assertSame('gift', $lines[0]['kind']);
         $this->assertSame(4, $lines[0]['rule_id']);
         $this->assertSame(0.0, $lines[0]['amount']);
-        $this->assertFalse($lines[0]['removable']);
+        $this->assertTrue($lines[0]['removable'], 'a gift coupon is removed with its code');
         $this->assertTrue($lines[1]['removable']);
+    }
+
+    public function testOnlyLinesWithACouponCodeAreRemovable(): void
+    {
+        $segment = ['extension_attributes' => ['discount_lines' => [
+            ['kind' => 'coupon', 'rule_id' => 1, 'code' => null, 'label' => 'X', 'amount' => 1.0, 'base_amount' => 1.0],
+            ['kind' => 'gift', 'rule_id' => 2, 'label' => 'Gift', 'amount' => 0.0, 'base_amount' => 0.0],
+            ['kind' => 'automatic', 'rule_id' => 3, 'code' => 'X', 'label' => 'A', 'amount' => 1.0, 'base_amount' => 1.0],
+            ['kind' => 'free_shipping', 'rule_id' => 4, 'code' => 'S', 'label' => 'S', 'amount' => 0.0,
+                'base_amount' => 0.0],
+            ['kind' => 'gift_card', 'rule_id' => null, 'code' => '••••1234', 'label' => 'Gift card ••••1234',
+                'amount' => 5.0, 'base_amount' => 5.0],
+        ]]];
+
+        $removable = array_column($this->viewModel->getLinesFromSegment($segment), 'removable');
+
+        $this->assertSame([false, false, false, false, false], $removable);
     }
 
     public function testReturnsEmptyWithoutExtensionAttributes(): void

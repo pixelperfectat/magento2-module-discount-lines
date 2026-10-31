@@ -58,7 +58,8 @@ class DiscountLines implements ArgumentInterface
      * Read the discount lines of a total segment.
      *
      * Accepts the segment as an array whose `extension_attributes` is the extension object, or as a plain
-     * (JSON-decoded) array. Lines are returned as contract arrays plus `removable` (true for coupons).
+     * (JSON-decoded) array. Lines are returned as contract arrays plus `removable` (true for coupon and gift lines
+     * that carry a coupon code).
      *
      * @param array<string, mixed> $segment
      * @return array<int, array{
@@ -148,15 +149,20 @@ class DiscountLines implements ArgumentInterface
     private function normalise(array $data): array
     {
         $kind = (string)($data['kind'] ?? '');
+        $code = isset($data['code']) ? (string)$data['code'] : null;
 
         return [
             'kind' => $kind,
             'rule_id' => isset($data['rule_id']) ? (int)$data['rule_id'] : null,
-            'code' => isset($data['code']) ? (string)$data['code'] : null,
+            'code' => $code,
             'label' => (string)($data['label'] ?? ''),
             'amount' => (float)($data['amount'] ?? 0.0),
             'base_amount' => (float)($data['base_amount'] ?? 0.0),
-            'removable' => $kind === DiscountLineInterface::KIND_COUPON,
+            'removable' => $code !== null && in_array(
+                $kind,
+                [DiscountLineInterface::KIND_COUPON, DiscountLineInterface::KIND_GIFT],
+                true
+            ),
         ];
     }
 }
