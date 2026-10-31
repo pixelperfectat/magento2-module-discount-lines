@@ -8,3 +8,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Module skeleton and store-view scoped configuration (enabled, display variant, email icon).
+- Discount lines on the cart `discount` total segment (`extension_attributes.discount_lines`), a ViewModel for storefront
+  renderers, a neutral default stylesheet with CSS custom properties and tag / percent / gift icons.
