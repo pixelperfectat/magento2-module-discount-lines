@@ -10,6 +10,7 @@ use Magento\Quote\Model\Quote\Item\AbstractItem;
 use Magento\SalesRule\Api\Data\RuleDiscountInterface;
 use PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface;
 use PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface;
+use PixelPerfect\DiscountLines\Api\Service\ItemRuleAttributorInterface;
 use PixelPerfect\DiscountLines\Api\Service\LabelResolverInterface;
 use PixelPerfect\DiscountLines\Api\Service\RuleLoaderInterface;
 use PixelPerfect\DiscountLines\Exception\UnattributableDiscountException;
@@ -25,10 +26,12 @@ class RuleDiscountResolver implements DiscountLineResolverInterface
     /**
      * @param RuleLoaderInterface $ruleLoader
      * @param LabelResolverInterface $labelResolver
+     * @param ItemRuleAttributorInterface[] $attributors Strategies for items with several rules and no breakdown
      */
     public function __construct(
         private readonly RuleLoaderInterface $ruleLoader,
-        private readonly LabelResolverInterface $labelResolver
+        private readonly LabelResolverInterface $labelResolver,
+        private readonly array $attributors = []
     ) {
     }
 
@@ -111,16 +114,35 @@ class RuleDiscountResolver implements DiscountLineResolverInterface
             }
             $applied = explode(',', (string)$item->getAppliedRuleIds());
             $ruleIds = array_unique(array_filter(array_map('intval', $applied)));
-            if (count($ruleIds) !== 1) {
+            $ruleId = count($ruleIds) === 1 ? (int)reset($ruleIds) : $this->attribute($item, $ruleIds);
+            if ($ruleId === null) {
                 throw new UnattributableDiscountException(
                     __('The discount of an item cannot be attributed to a single rule.')
                 );
             }
-            $ruleId = reset($ruleIds);
             $perRule[$ruleId] ??= [0.0, 0.0];
             $perRule[$ruleId][0] += abs((float)$item->getDiscountAmount());
             $perRule[$ruleId][1] += abs((float)$item->getBaseDiscountAmount());
         }
+    }
+
+    /**
+     * Ask the registered strategies which rule owns the discount of an item with several rules.
+     *
+     * @param AbstractItem $item
+     * @param int[] $ruleIds
+     * @return int|null
+     */
+    private function attribute(AbstractItem $item, array $ruleIds): ?int
+    {
+        foreach ($this->attributors as $attributor) {
+            $ruleId = $attributor->attribute($item, array_values($ruleIds));
+            if ($ruleId !== null && in_array($ruleId, $ruleIds, true)) {
+                return $ruleId;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -204,4 +204,33 @@ class RuleDiscountResolverTest extends TestCase
 
         $this->resolver->resolve($address, $this->quote());
     }
+
+    public function testAttributorResolvesItemWithSeveralRules(): void
+    {
+        $this->ruleLoader->method('load')->willReturnCallback(fn (int $id) => $this->rule($id));
+        $this->labelResolver->method('resolve')
+            ->willReturn(['kind' => 'coupon', 'code' => 'CODE', 'label' => 'CODE']);
+        $attributor = $this->createMock(\PixelPerfect\DiscountLines\Api\Service\ItemRuleAttributorInterface::class);
+        $attributor->method('attribute')->willReturn(2);
+        $resolver = new RuleDiscountResolver($this->ruleLoader, $this->labelResolver, [$attributor]);
+        $address = $this->addressWithItems([], [$this->item(1.5, '1,2', false)]);
+
+        $lines = $resolver->resolve($address, $this->quote());
+
+        $this->assertCount(1, $lines);
+        $this->assertSame(2, $lines[0]->getRuleId());
+        $this->assertSame(1.5, $lines[0]->getAmount());
+    }
+
+    public function testAttributorAnswerOutsideTheAppliedRulesIsIgnored(): void
+    {
+        $attributor = $this->createMock(\PixelPerfect\DiscountLines\Api\Service\ItemRuleAttributorInterface::class);
+        $attributor->method('attribute')->willReturn(99);
+        $resolver = new RuleDiscountResolver($this->ruleLoader, $this->labelResolver, [$attributor]);
+        $address = $this->addressWithItems([], [$this->item(1.5, '1,2', false)]);
+
+        $this->expectException(UnattributableDiscountException::class);
+
+        $resolver->resolve($address, $this->quote());
+    }
 }
