@@ -52,11 +52,11 @@ class TotalsPlugin
         if (!is_array($result)) {
             return $result;
         }
-        $hasRow = $this->hasDiscountRow($result);
-        if (!$hasRow && !$this->mayInsert($area)) {
-            return $result;
-        }
         try {
+            $hasRow = $this->hasDiscountRow($result);
+            if (!$hasRow && !$this->mayInsert($area)) {
+                return $result;
+            }
             $lines = $this->loadLines($subject);
             if ($lines === []) {
                 return $result;
