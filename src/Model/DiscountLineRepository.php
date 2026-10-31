@@ -70,13 +70,14 @@ class DiscountLineRepository implements DiscountLineRepositoryInterface
         $result = [];
         foreach ($collection as $record) {
             $itemId = (int)$record->getData('order_item_id');
-            $key = $record->getData('rule_id') !== null
-                ? (int)$record->getData('rule_id')
-                : $record->getData('kind') . ':' . $record->getData('code');
+            if ($record->getData('rule_id') === null) {
+                continue;
+            }
+            $key = (int)$record->getData('rule_id');
             $current = $result[$itemId][$key] ?? ['amount' => 0.0, 'base_amount' => 0.0];
             $result[$itemId][$key] = [
-                'amount' => $current['amount'] + (float)$record->getData('amount'),
-                'base_amount' => $current['base_amount'] + (float)$record->getData('base_amount'),
+                'amount' => round($current['amount'] + (float)$record->getData('amount'), 4),
+                'base_amount' => round($current['base_amount'] + (float)$record->getData('base_amount'), 4),
             ];
         }
 

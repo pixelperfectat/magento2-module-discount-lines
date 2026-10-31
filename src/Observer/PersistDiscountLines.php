@@ -76,7 +76,7 @@ class PersistDiscountLines implements ObserverInterface
         $byRule = [];
         foreach ($lines as $line) {
             $rows[] = $this->row(null, $line, $line->getAmount(), $line->getBaseAmount());
-            if ($line->getRuleId() !== null) {
+            if ($line->getRuleId() !== null && $line->getKind() !== DiscountLineInterface::KIND_FREE_SHIPPING) {
                 $byRule[$line->getRuleId()] = $line;
             }
         }
@@ -148,7 +148,7 @@ class PersistDiscountLines implements ObserverInterface
     {
         foreach ($lines as $line) {
             $ruleId = $line->getRuleId();
-            if ($ruleId === null) {
+            if ($ruleId === null || $line->getKind() === DiscountLineInterface::KIND_FREE_SHIPPING) {
                 continue;
             }
             $sum = 0.0;

@@ -31,12 +31,10 @@ interface DiscountLineRepositoryInterface
     public function getOrderLines(int $orderId): array;
 
     /**
-     * Get the item-level amounts: order_item_id => rule key => amounts.
-     *
-     * The rule key is the rule id, or "kind:code" for lines without a rule.
+     * Get the item-level amounts: order_item_id => rule_id => amounts.
      *
      * @param int $orderId
-     * @return array<int, array<int|string, array{amount: float, base_amount: float}>>
+     * @return array<int, array<int, array{amount: float, base_amount: float}>>
      */
     public function getItemAmounts(int $orderId): array;
 

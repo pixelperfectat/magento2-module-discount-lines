@@ -238,9 +238,49 @@ class PersistDiscountLinesTest extends TestCase
         $this->observer->execute($this->event([], []));
     }
 
+    public function testRepositoryFailureIsLoggedAndSwallowed(): void
+    {
+        $this->quoteLines->method('getLines')->willReturn([
+            $this->line(DiscountLineInterface::KIND_COUPON, 1, 'CODE-A', 'CODE-A', 1.0, 0),
+        ]);
+        $this->repository->expects($this->once())->method('saveForOrder')
+            ->willThrowException(new \RuntimeException('db down'));
+        $this->logger->expects($this->once())->method('error');
+
+        $this->observer->execute($this->event([], []));
+        $this->addToAssertionCount(1);
+    }
+
+    public function testRuleWithItemDiscountAndFreeShippingKeepsItemRowsOnRuleLine(): void
+    {
+        $this->quoteLines->method('getLines')->willReturn([
+            $this->line(DiscountLineInterface::KIND_COUPON, 1, 'CODE-A', 'CODE-A', 2.0, 0),
+            $this->line(DiscountLineInterface::KIND_FREE_SHIPPING, 1, 'CODE-A', 'CODE-A', 5.0, 1),
+        ]);
+        $event = $this->event(
+            [$this->orderItem(901, 11)],
+            [$this->quoteItem(11, [$this->discount(1, 2.0, 2.0)])]
+        );
+
+        $captured = [];
+        $this->repository->method('saveForOrder')->willReturnCallback(
+            function (int $id, array $rows) use (&$captured): void {
+                $captured = $rows;
+            }
+        );
+        $this->observer->execute($event);
+
+        $itemRows = array_values(array_filter($captured, static fn (array $r): bool => $r['order_item_id'] !== null));
+        $this->assertCount(1, $itemRows);
+        $this->assertSame('coupon', $itemRows[0]['kind']);
+        $this->assertSame(2.0, $itemRows[0]['amount']);
+        $this->assertCount(3, $captured);
+    }
+
     public function testFailureIsLoggedAndSwallowed(): void
     {
         $this->quoteLines->method('getLines')->willThrowException(new \RuntimeException('boom'));
+        $this->repository->expects($this->never())->method('saveForOrder');
         $this->logger->expects($this->once())->method('error');
 
         $this->observer->execute($this->event([], []));
