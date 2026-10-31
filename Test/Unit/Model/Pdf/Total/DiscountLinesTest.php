@@ -77,6 +77,22 @@ class DiscountLinesTest extends TestCase
         );
     }
 
+    public function testZeroGiftAndFreeShippingLinesPrintTextInsteadOfZero(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->repository->method('hasLines')->willReturn(true);
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_COUPON, 5, 'SAVE10', 'SAVE10', 12.0, 12.0, 0),
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0, 1),
+            new DiscountLine(DiscountLineInterface::KIND_FREE_SHIPPING, 7, null, 'Free shipping', 0.0, 0.0, 2),
+        ]);
+
+        $entries = $this->total->getTotalsForDisplay();
+
+        $this->assertSame(['EUR -12.00', 'Gift', 'Free'], array_column($entries, 'amount'));
+        $this->assertSame(['Coupon SAVE10:', 'Gift: FREEBIE:', 'Free shipping:'], array_column($entries, 'label'));
+    }
+
     public function testFallsBackToCoreEntryWithoutLines(): void
     {
         $this->config->method('isEnabled')->willReturn(true);

@@ -62,7 +62,8 @@ class DiscountLines extends DefaultTotal
                     $entries = [];
                     foreach ($lines as $line) {
                         $entries[] = [
-                            'amount' => $this->getOrder()->formatPriceTxt($this->labels->value($line)),
+                            'amount' => $this->labels->amountText($line)
+                                ?? $this->getOrder()->formatPriceTxt($this->labels->value($line)),
                             'label' => $this->labels->format($line) . ':',
                             'font_size' => $fontSize,
                         ];
