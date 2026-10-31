@@ -22,6 +22,7 @@ use Throwable;
 class CartTotalRepositoryPlugin
 {
     public const SEGMENT_CODE = 'discount';
+    private const EPSILON = 0.00001;
 
     /**
      * @param CartRepositoryInterface $cartRepository
@@ -55,6 +56,9 @@ class CartTotalRepositoryPlugin
 
         try {
             $quote = $this->cartRepository->getActive((int)$cartId);
+            if ($quote instanceof Quote) {
+                $this->ensureRuleBreakdown($quote);
+            }
             $lines = $quote instanceof Quote ? $this->quoteLines->getLines($quote) : [];
             if ($lines === []) {
                 return $result;
@@ -72,5 +76,29 @@ class CartTotalRepositoryPlugin
         }
 
         return $result;
+    }
+
+    /**
+     * Collect the totals when the loaded quote lacks the per-rule breakdown.
+     *
+     * The breakdown (`discounts` on the address extension attributes) only exists in the request that collected the
+     * totals; a quote freshly loaded from the database (REST totals, cart page) has the discount amount but no
+     * breakdown. Collecting is what every cart action does anyway and yields the same amounts.
+     *
+     * @param Quote $quote
+     * @return void
+     */
+    private function ensureRuleBreakdown(Quote $quote): void
+    {
+        $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
+        if (abs((float)$address->getDiscountAmount()) < self::EPSILON) {
+            return;
+        }
+        $extension = $address->getExtensionAttributes();
+        // The extension interface is generated at runtime and unknown to static analysis.
+        // @phpstan-ignore-next-line
+        if ($extension === null || !$extension->getDiscounts()) {
+            $quote->collectTotals();
+        }
     }
 }
