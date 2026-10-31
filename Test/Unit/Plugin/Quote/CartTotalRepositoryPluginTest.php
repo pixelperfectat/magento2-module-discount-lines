@@ -196,7 +196,7 @@ class CartTotalRepositoryPluginTest extends TestCase
         $this->assertStringContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
     }
 
-    public function testMissingStoredLinesLeaveTheCoreRow(): void
+    public function testTitleWithoutStoredLinesIsPlainDiscount(): void
     {
         $discount = $this->segment(-5.56);
         $this->store->method('load')->willReturn([]);
@@ -204,7 +204,8 @@ class CartTotalRepositoryPluginTest extends TestCase
         $this->process($this->totals(['discount' => $discount]));
 
         $this->assertNull($discount->getExtensionAttributes());
-        $this->assertStringContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
+        $this->assertSame('Discount', $discount->getTitle());
+        $this->assertStringNotContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
     }
 
     public function testNoChangeWithoutDiscountSegment(): void

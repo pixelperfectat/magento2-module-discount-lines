@@ -10,6 +10,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use PixelPerfect\DiscountLines\Api\ConfigInterface;
 use PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface;
+use PixelPerfect\DiscountLines\Exception\UnattributableDiscountException;
 use PixelPerfect\DiscountLines\Model\Data\DiscountLine;
 use PixelPerfect\DiscountLines\Service\QuoteDiscountLines;
 
@@ -75,6 +76,34 @@ class QuoteDiscountLinesTest extends TestCase
 
         $this->assertSame(2.0, $lines[0]->getAmount());
         $this->assertSame(0.0, $lines[1]->getAmount());
+    }
+
+    public function testUnattributableDiscountReturnsNoLines(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willThrowException(new UnattributableDiscountException(__('x')));
+
+        $this->assertSame([], $this->service->getLines($this->quote(-5.0)));
+    }
+
+    public function testLinesForAddressUseTheGivenAddress(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $quote = $this->quote(-9.0);
+        $address = $this->getMockBuilder(Address::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['getQuote'])
+            ->addMethods(['getDiscountAmount', 'getBaseDiscountAmount'])
+            ->getMock();
+        $address->method('getQuote')->willReturn($quote);
+        $address->method('getDiscountAmount')->willReturn(-2.0);
+        $address->method('getBaseDiscountAmount')->willReturn(-2.0);
+        $this->resolver->expects($this->once())->method('resolve')->with($address, $quote)
+            ->willReturn([new DiscountLine('coupon', 1, 'X', 'X', 2.0, 2.0)]);
+
+        $lines = $this->service->getLinesForAddress($address);
+
+        $this->assertSame(2.0, $lines[0]->getAmount());
     }
 
     public function testDisabledReturnsEmpty(): void

@@ -49,13 +49,15 @@ class StoreQuoteDiscountLines implements ObserverInterface
             /** @var Address $address */
             $address = $assignment->getShipping()->getAddress();
             if (!$this->config->isEnabled((int)$quote->getStoreId())) {
+                $this->store->store($address, []);
+
                 return;
             }
             $carrier = $quote->isVirtual() ? Address::ADDRESS_TYPE_BILLING : Address::ADDRESS_TYPE_SHIPPING;
             if ($address->getAddressType() !== $carrier) {
                 return;
             }
-            $this->store->store($address, $this->quoteDiscountLines->getLines($quote));
+            $this->store->store($address, $this->quoteDiscountLines->getLinesForAddress($address));
         } catch (Throwable $exception) {
             $this->logger->error(
                 'Discount lines could not be stored on the quote address: ' . $exception->getMessage(),

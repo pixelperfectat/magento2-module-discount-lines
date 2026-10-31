@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace PixelPerfect\DiscountLines\Service;
 
 use Magento\Quote\Model\Quote;
+use Magento\Quote\Model\Quote\Address;
 use PixelPerfect\DiscountLines\Api\ConfigInterface;
 use PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface;
 use PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface;
 use PixelPerfect\DiscountLines\Api\Service\QuoteDiscountLinesInterface;
+use PixelPerfect\DiscountLines\Exception\UnattributableDiscountException;
 use PixelPerfect\DiscountLines\Model\Data\DiscountLine;
 
 class QuoteDiscountLines implements QuoteDiscountLinesInterface
@@ -30,12 +32,37 @@ class QuoteDiscountLines implements QuoteDiscountLinesInterface
      */
     public function getLines(Quote $quote): array
     {
+        $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
+
+        return $this->compute($address, $quote);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getLinesForAddress(Address $address): array
+    {
+        return $this->compute($address, $address->getQuote());
+    }
+
+    /**
+     * Resolve and reconcile the lines of an address.
+     *
+     * @param Address $address
+     * @param Quote $quote
+     * @return DiscountLineInterface[]
+     */
+    private function compute(Address $address, Quote $quote): array
+    {
         if (!$this->config->isEnabled((int)$quote->getStoreId())) {
             return [];
         }
 
-        $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
-        $lines = $this->resolver->resolve($address, $quote);
+        try {
+            $lines = $this->resolver->resolve($address, $quote);
+        } catch (UnattributableDiscountException) {
+            return [];
+        }
         if ($lines === []) {
             return [];
         }

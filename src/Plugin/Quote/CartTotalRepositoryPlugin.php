@@ -66,6 +66,9 @@ class CartTotalRepositoryPlugin
             $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
             $lines = $this->store->load($address);
             if ($lines === []) {
+                // Never let the core title through: it carries the rule description.
+                $segment->setTitle((string)__('Discount'));
+
                 return $result;
             }
             $extension = $segment->getExtensionAttributes() ?? $this->extensionFactory->create();

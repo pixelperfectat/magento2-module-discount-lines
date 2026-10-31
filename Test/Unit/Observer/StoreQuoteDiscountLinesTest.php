@@ -75,7 +75,7 @@ class StoreQuoteDiscountLinesTest extends TestCase
         $quote = $this->quote(false);
         $address = $this->address(Address::ADDRESS_TYPE_SHIPPING);
         $lines = [new DiscountLine('coupon', 1, 'CODE', 'CODE', 2.0, 2.0)];
-        $this->quoteLines->method('getLines')->with($quote)->willReturn($lines);
+        $this->quoteLines->method('getLinesForAddress')->with($address)->willReturn($lines);
         $this->store->expects($this->once())->method('store')->with($address, $lines);
 
         $this->observer->execute($this->event($quote, $address));
@@ -85,7 +85,7 @@ class StoreQuoteDiscountLinesTest extends TestCase
     {
         $quote = $this->quote(false);
         $address = $this->address(Address::ADDRESS_TYPE_SHIPPING);
-        $this->quoteLines->method('getLines')->willReturn([]);
+        $this->quoteLines->method('getLinesForAddress')->willReturn([]);
         $this->store->expects($this->once())->method('store')->with($address, []);
 
         $this->observer->execute($this->event($quote, $address));
@@ -94,7 +94,7 @@ class StoreQuoteDiscountLinesTest extends TestCase
     public function testBillingAddressCarriesTheLinesOfVirtualQuotes(): void
     {
         $quote = $this->quote(true);
-        $this->quoteLines->method('getLines')->willReturn([]);
+        $this->quoteLines->method('getLinesForAddress')->willReturn([]);
         $this->store->expects($this->once())->method('store');
 
         $this->observer->execute($this->event($quote, $this->address(Address::ADDRESS_TYPE_SHIPPING)));
@@ -108,20 +108,39 @@ class StoreQuoteDiscountLinesTest extends TestCase
         $this->observer->execute($this->event($this->quote(false), $this->address(Address::ADDRESS_TYPE_BILLING)));
     }
 
-    public function testDisabledStoreDoesNothing(): void
+    public function testUsesEventAddressNotQuoteShippingAddress(): void
+    {
+        $other = $this->address(Address::ADDRESS_TYPE_SHIPPING);
+        $quote = $this->getMockBuilder(Quote::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['isVirtual', 'getStoreId', 'getShippingAddress'])
+            ->getMock();
+        $quote->method('isVirtual')->willReturn(false);
+        $quote->method('getStoreId')->willReturn(1);
+        $quote->method('getShippingAddress')->willReturn($other);
+        $address = $this->address(Address::ADDRESS_TYPE_SHIPPING);
+        $this->quoteLines->expects($this->once())->method('getLinesForAddress')->with($this->identicalTo($address))
+            ->willReturn([]);
+        $this->store->expects($this->once())->method('store')->with($this->identicalTo($address), []);
+
+        $this->observer->execute($this->event($quote, $address));
+    }
+
+    public function testDisabledStoreClearsStoredLines(): void
     {
         $config = $this->createMock(ConfigInterface::class);
         $config->method('isEnabled')->willReturn(false);
         $observer = new StoreQuoteDiscountLines($config, $this->quoteLines, $this->store, $this->logger);
-        $this->quoteLines->expects($this->never())->method('getLines');
-        $this->store->expects($this->never())->method('store');
+        $address = $this->address(Address::ADDRESS_TYPE_SHIPPING);
+        $this->quoteLines->expects($this->never())->method('getLinesForAddress');
+        $this->store->expects($this->once())->method('store')->with($address, []);
 
-        $observer->execute($this->event($this->quote(false), $this->address(Address::ADDRESS_TYPE_SHIPPING)));
+        $observer->execute($this->event($this->quote(false), $address));
     }
 
     public function testErrorsAreSwallowedAndLogged(): void
     {
-        $this->quoteLines->method('getLines')->willThrowException(new \RuntimeException('boom'));
+        $this->quoteLines->method('getLinesForAddress')->willThrowException(new \RuntimeException('boom'));
         $this->logger->expects($this->once())->method('error');
 
         $this->observer->execute($this->event($this->quote(false), $this->address(Address::ADDRESS_TYPE_SHIPPING)));

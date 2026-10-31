@@ -14,6 +14,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use PixelPerfect\DiscountLines\Api\Service\LabelResolverInterface;
 use PixelPerfect\DiscountLines\Api\Service\RuleLoaderInterface;
+use PixelPerfect\DiscountLines\Exception\UnattributableDiscountException;
 use PixelPerfect\DiscountLines\Service\Resolver\RuleDiscountResolver;
 
 class RuleDiscountResolverTest extends TestCase
@@ -53,6 +54,7 @@ class RuleDiscountResolverTest extends TestCase
         $extension->method('getDiscounts')->willReturn($discounts);
         $address = $this->createMock(Address::class);
         $address->method('getExtensionAttributes')->willReturn($extension);
+        $address->method('getAllItems')->willReturn([]);
 
         return $address;
     }
@@ -136,5 +138,70 @@ class RuleDiscountResolverTest extends TestCase
     public function testNoDiscountsReturnsEmpty(): void
     {
         $this->assertSame([], $this->resolver->resolve($this->address([]), $this->quote()));
+    }
+
+    /**
+     * @param Quote\Item[] $items
+     * @param RuleDiscountInterface[] $discounts
+     */
+    private function addressWithItems(array $discounts, array $items): Address
+    {
+        $extension = $this->getMockBuilder(ExtensionAttributesInterface::class)
+            ->addMethods(['getDiscounts'])
+            ->getMockForAbstractClass();
+        $extension->method('getDiscounts')->willReturn($discounts);
+        $address = $this->createMock(Address::class);
+        $address->method('getExtensionAttributes')->willReturn($extension);
+        $address->method('getAllItems')->willReturn($items);
+
+        return $address;
+    }
+
+    private function item(float $discount, string $ruleIds, bool $hasBreakdown): Quote\Item
+    {
+        $extension = $this->getMockBuilder(ExtensionAttributesInterface::class)
+            ->addMethods(['getDiscounts'])
+            ->getMockForAbstractClass();
+        $breakdown = $hasBreakdown ? [$this->discount(1, $discount, $discount)] : null;
+        $extension->method('getDiscounts')->willReturn($breakdown);
+        $item = $this->getMockBuilder(Quote\Item::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['getParentItem', 'getExtensionAttributes'])
+            ->addMethods(['getDiscountAmount', 'getBaseDiscountAmount', 'getAppliedRuleIds'])
+            ->getMock();
+        $item->method('getParentItem')->willReturn(null);
+        $item->method('getExtensionAttributes')->willReturn($extension);
+        $item->method('getDiscountAmount')->willReturn($discount);
+        $item->method('getBaseDiscountAmount')->willReturn($discount);
+        $item->method('getAppliedRuleIds')->willReturn($ruleIds);
+
+        return $item;
+    }
+
+    public function testItemWithoutIdAndSingleAppliedRuleIsCreditedToThatRule(): void
+    {
+        $this->ruleLoader->method('load')->willReturnCallback(fn (int $id) => $this->rule($id));
+        $this->labelResolver->method('resolve')
+            ->willReturn(['kind' => 'automatic', 'code' => null, 'label' => 'Autumn sale']);
+        // rule 2 is in the address breakdown for the first item (3.00), the second item (1.50) has none
+        $address = $this->addressWithItems(
+            [$this->discount(2, -3.0, -3.0)],
+            [$this->item(3.0, '2', true), $this->item(1.5, '2', false)]
+        );
+
+        $lines = $this->resolver->resolve($address, $this->quote());
+
+        $this->assertCount(1, $lines);
+        $this->assertSame(4.5, $lines[0]->getAmount());
+        $this->assertSame(2, $lines[0]->getRuleId());
+    }
+
+    public function testItemWithoutIdAndSeveralRulesStoresNull(): void
+    {
+        $address = $this->addressWithItems([], [$this->item(1.5, '1,2', false)]);
+
+        $this->expectException(UnattributableDiscountException::class);
+
+        $this->resolver->resolve($address, $this->quote());
     }
 }
