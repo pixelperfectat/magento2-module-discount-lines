@@ -77,7 +77,7 @@ class CartTotalRepositoryPlugin
 
                 return $result;
             }
-            if ($lines === []) {
+            if ($lines === [] || !$this->sumMatches($lines, (float)$segment->getValue())) {
                 // Never let the core title through: it carries the rule description.
                 $segment->setTitle((string)__('Discount'));
 
@@ -137,6 +137,23 @@ class CartTotalRepositoryPlugin
             + [self::SEGMENT_CODE => $segment]
             + array_slice($existing, $position, null, true)
         );
+    }
+
+    /**
+     * Whether the lines add up to the discount segment to the cent; otherwise they are not shown at all.
+     *
+     * @param DiscountLineInterface[] $lines
+     * @param float $segmentValue
+     * @return bool
+     */
+    private function sumMatches(array $lines, float $segmentValue): bool
+    {
+        $sum = 0.0;
+        foreach ($lines as $line) {
+            $sum += $line->getAmount();
+        }
+
+        return round($sum, 2) === round(abs($segmentValue), 2);
     }
 
     /**

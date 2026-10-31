@@ -56,7 +56,7 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
     private function load(AbstractModel $source): array
     {
         if ($source instanceof Order) {
-            return $this->repository->getOrderLines((int)$source->getId());
+            return $this->forOrder($source, $this->repository->getOrderLines((int)$source->getId()));
         }
 
         $orderId = (int)$source->getData('order_id');
@@ -66,6 +66,61 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
         }
 
         return $this->splitForDocument($source, $orderId, $lines);
+    }
+
+    /**
+     * Stored order lines as they are when they add up to the order discount, otherwise scaled to it.
+     *
+     * @param Order $order
+     * @param DiscountLineInterface[] $lines
+     * @return DiscountLineInterface[]
+     */
+    private function forOrder(Order $order, array $lines): array
+    {
+        if ($lines === []) {
+            return [];
+        }
+        $target = round(abs((float)$order->getData('discount_amount')), 2);
+        $baseTarget = round(abs((float)$order->getData('base_discount_amount')), 2);
+        $sum = 0.0;
+        $baseSum = 0.0;
+        foreach ($lines as $line) {
+            $sum += $line->getAmount();
+            $baseSum += $line->getBaseAmount();
+        }
+        if (round($sum, 2) === $target && round($baseSum, 2) === $baseTarget) {
+            return $lines;
+        }
+
+        return $this->scaleTo($lines, $target, $baseTarget);
+    }
+
+    /**
+     * Scale lines to a discount total; no lines (core row) when there is no money to scale or nothing to scale to.
+     *
+     * @param DiscountLineInterface[] $lines
+     * @param float $target
+     * @param float $baseTarget
+     * @return DiscountLineInterface[]
+     */
+    private function scaleTo(array $lines, float $target, float $baseTarget): array
+    {
+        $sum = 0.0;
+        $baseSum = 0.0;
+        foreach ($lines as $line) {
+            $sum += $line->getAmount();
+            $baseSum += $line->getBaseAmount();
+        }
+        $hasMoney = $sum > self::EPSILON && $baseSum > self::EPSILON;
+        $hasTarget = $target > self::EPSILON && $baseTarget > self::EPSILON;
+        if ($hasMoney !== $hasTarget) {
+            return [];
+        }
+        if (!$hasTarget) {
+            return $lines;
+        }
+
+        return $this->splitter->split($lines, $target, $baseTarget);
     }
 
     /**
@@ -125,7 +180,11 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
             )
         )));
 
-        return $this->splitter->split($result, $docDiscount, $docBaseDiscount);
+        if ($result === []) {
+            return [];
+        }
+
+        return $this->scaleTo($result, $docDiscount, $docBaseDiscount);
     }
 
     /**

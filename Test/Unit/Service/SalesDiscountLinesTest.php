@@ -37,14 +37,20 @@ class SalesDiscountLinesTest extends TestCase
     /**
      * @param array<string, mixed> $data
      */
-    private function order(array $data): Order&MockObject
+    private function order(array $data, int $id = 0): Order&MockObject
     {
         $order = $this->createMock(Order::class);
+        $order->method('getId')->willReturn($id);
         $order->method('getData')->willReturnCallback(
             static fn($key = '') => $data[$key] ?? null
         );
 
         return $order;
+    }
+
+    private function placedOrder(float $discount): Order&MockObject
+    {
+        return $this->order(['discount_amount' => -$discount, 'base_discount_amount' => -$discount], 42);
     }
 
     /**
@@ -76,11 +82,55 @@ class SalesDiscountLinesTest extends TestCase
     public function testOrderReturnsStoredLines(): void
     {
         $lines = [$this->line('coupon', 5, 2.0, 'CODE')];
-        $order = $this->createMock(Order::class);
-        $order->method('getId')->willReturn(42);
+        $order = $this->placedOrder(2.0);
         $this->repository->method('getOrderLines')->with(42)->willReturn($lines);
 
         $this->assertSame($lines, $this->service->getLines($order));
+    }
+
+    public function testOrderLinesNotMatchingTheOrderDiscountAreScaledToIt(): void
+    {
+        $this->repository->method('getOrderLines')->willReturn([
+            $this->line('coupon', 5, 6.0, 'CODE'),
+            $this->line('automatic', 6, 2.0),
+        ]);
+
+        $lines = $this->service->getLines($this->placedOrder(10.0));
+
+        $this->assertSame([7.5, 2.5], array_map(static fn($line) => $line->getAmount(), $lines));
+        $this->assertSame([7.5, 2.5], array_map(static fn($line) => $line->getBaseAmount(), $lines));
+    }
+
+    public function testOrderLinesWithoutMoneyFallBackForADiscountedOrder(): void
+    {
+        $this->repository->method('getOrderLines')->willReturn([$this->line('gift', 9, 0.0, 'FREEBIE')]);
+
+        $this->assertSame([], $this->service->getLines($this->placedOrder(10.0)));
+    }
+
+    public function testOrderMoneyLinesFallBackForAnOrderWithoutDiscount(): void
+    {
+        $this->repository->method('getOrderLines')->willReturn([$this->line('coupon', 5, 2.0, 'CODE')]);
+
+        $this->assertSame([], $this->service->getLines($this->placedOrder(0.0)));
+    }
+
+    public function testZeroLinesOfAnOrderWithoutDiscountAreKept(): void
+    {
+        $lines = [$this->line('gift', 9, 0.0, 'FREEBIE')];
+        $this->repository->method('getOrderLines')->willReturn($lines);
+
+        $this->assertSame($lines, $this->service->getLines($this->placedOrder(0.0)));
+    }
+
+    public function testDocumentWithOnlyZeroLinesButAMoneyDiscountFallsBack(): void
+    {
+        $order = $this->order(['discount_amount' => -5.0, 'base_discount_amount' => -5.0, 'shipping_amount' => 0.0]);
+        $this->repository->method('getOrderLines')->willReturn([$this->line('gift', 9, 0.0, 'FREEBIE')]);
+        $this->repository->method('getItemAmounts')->willReturn([]);
+        $data = ['order_id' => 1, 'discount_amount' => -5.0, 'base_discount_amount' => -5.0, 'shipping_amount' => 0.0];
+
+        $this->assertSame([], $this->service->getLines($this->invoice($order, [], $data)));
     }
 
     public function testPartialRefundSplitsByQty(): void
@@ -303,8 +353,7 @@ class SalesDiscountLinesTest extends TestCase
 
     public function testLinesAreLoadedOncePerSource(): void
     {
-        $order = $this->createMock(Order::class);
-        $order->method('getId')->willReturn(42);
+        $order = $this->placedOrder(2.0);
         $this->repository->expects($this->once())->method('getOrderLines')
             ->willReturn([$this->line('coupon', 5, 2.0, 'CODE')]);
 

@@ -228,6 +228,18 @@ class CartTotalRepositoryPluginTest extends TestCase
         $this->assertStringContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
     }
 
+    public function testLinesNotSummingToTheSegmentAreIgnored(): void
+    {
+        $discount = $this->segment(-5.0);
+        // lines of 5.56 against a discount segment of 5.00 (e.g. another plugin changed the discount afterwards)
+        $this->store->method('load')->willReturn($this->twoLines());
+
+        $this->process($this->totals(['discount' => $discount]));
+
+        $this->assertNull($discount->getExtensionAttributes());
+        $this->assertSame('Discount', $discount->getTitle());
+    }
+
     public function testTitleWithoutStoredLinesIsPlainDiscount(): void
     {
         $discount = $this->segment(-5.56);
