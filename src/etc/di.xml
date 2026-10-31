@@ -28,6 +28,11 @@
                 type="PixelPerfect\DiscountLines\Plugin\Sales\Block\Order\TotalsPlugin"/>
     </type>
 
+    <type name="Magento\Quote\Api\CartTotalRepositoryInterface">
+        <plugin name="pp_discount_lines_cart_totals"
+                type="PixelPerfect\DiscountLines\Plugin\Quote\CartTotalRepositoryPlugin"/>
+    </type>
+
     <type name="PixelPerfect\DiscountLines\Service\Resolver\CompositeResolver">
         <arguments>
             <argument name="resolvers" xsi:type="array">

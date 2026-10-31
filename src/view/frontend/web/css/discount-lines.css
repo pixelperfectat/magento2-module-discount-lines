@@ -1,0 +1,146 @@
+/*
+ * Discount Lines - default storefront look (neutral greys, one muted green for savings).
+ * Override the custom properties on :root (or any ancestor) to match a theme; every colour used here is one of them.
+ * Variant classes: .pp-dl--a .. .pp-dl--d on the wrapper.
+ */
+:root {
+    --pp-dl-chip-bg: #eceff1;
+    --pp-dl-chip-ink: #37474f;
+    --pp-dl-auto-bg: #f5f5f5;
+    --pp-dl-auto-ink: #546e7a;
+    --pp-dl-save: #2e7d5b;
+}
+
+.pp-dl {
+    display: block;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.pp-dl__line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+}
+
+.pp-dl__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.pp-dl__icon {
+    flex: none;
+    width: 1em;
+    height: 1em;
+    color: var(--pp-dl-chip-ink);
+}
+
+.pp-dl__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    padding: 0.1em 0.6em;
+    border-radius: 999px;
+    background: var(--pp-dl-chip-bg);
+    color: var(--pp-dl-chip-ink);
+    font-size: 0.875em;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.pp-dl__chip--automatic,
+.pp-dl__chip--gift,
+.pp-dl__chip--free_shipping,
+.pp-dl__chip--gift_card {
+    background: var(--pp-dl-auto-bg);
+    color: var(--pp-dl-auto-ink);
+}
+
+.pp-dl__chip--automatic .pp-dl__icon,
+.pp-dl__chip--gift .pp-dl__icon,
+.pp-dl__chip--free_shipping .pp-dl__icon,
+.pp-dl__chip--gift_card .pp-dl__icon {
+    color: var(--pp-dl-auto-ink);
+}
+
+.pp-dl__amount {
+    flex: none;
+    color: var(--pp-dl-save);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pp-dl__remove {
+    flex: none;
+    margin-left: 0.25rem;
+    padding: 0 0.25em;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.pp-dl__remove:hover,
+.pp-dl__remove:focus-visible {
+    opacity: 1;
+}
+
+/* A: plain label with the chip on a second row below it. */
+.pp-dl--a .pp-dl__line {
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.pp-dl--a .pp-dl__label {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+}
+
+/* B (default): the chip is the label. */
+.pp-dl--b .pp-dl__chip {
+    font-size: 0.9375em;
+}
+
+/* C: grouped block with a "You save" sum. */
+.pp-dl--c {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--pp-dl-chip-bg);
+    border-radius: 0.5rem;
+}
+
+.pp-dl--c .pp-dl__summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--pp-dl-chip-bg);
+    font-weight: 600;
+}
+
+.pp-dl--c .pp-dl__summary .pp-dl__amount {
+    font-weight: 600;
+}
+
+/* D: quiet icon plus monospace, no chip background. */
+.pp-dl--d .pp-dl__chip {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8125em;
+}
+
+.pp-dl--d .pp-dl__amount {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8125em;
+}
