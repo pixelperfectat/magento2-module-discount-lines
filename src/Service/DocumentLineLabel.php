@@ -28,9 +28,6 @@ class DocumentLineLabel implements DocumentLineLabelInterface
      */
     public function value(DiscountLineInterface $line, bool $base = false): float
     {
-        if ($line->getKind() === DiscountLineInterface::KIND_GIFT) {
-            return 0.0;
-        }
         $amount = $base ? $line->getBaseAmount() : $line->getAmount();
 
         return $amount > 0.0 ? -$amount : 0.0;

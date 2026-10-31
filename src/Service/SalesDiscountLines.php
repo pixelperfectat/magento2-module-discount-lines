@@ -16,6 +16,9 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
 {
     private const EPSILON = 0.00001;
 
+    /** @var \WeakMap<AbstractModel, DiscountLineInterface[]> */
+    private \WeakMap $cache;
+
     /**
      * @param DiscountLineRepositoryInterface $repository
      * @param ProportionalSplitterInterface $splitter
@@ -24,12 +27,28 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
         private readonly DiscountLineRepositoryInterface $repository,
         private readonly ProportionalSplitterInterface $splitter
     ) {
+        $this->cache = new \WeakMap();
     }
 
     /**
      * @inheritDoc
      */
     public function getLines(AbstractModel $source): array
+    {
+        if (!isset($this->cache[$source])) {
+            $this->cache[$source] = $this->load($source);
+        }
+
+        return $this->cache[$source];
+    }
+
+    /**
+     * Load the lines for a source.
+     *
+     * @param AbstractModel $source
+     * @return DiscountLineInterface[]
+     */
+    private function load(AbstractModel $source): array
     {
         if ($source instanceof Order) {
             return $this->repository->getOrderLines((int)$source->getId());
@@ -63,14 +82,14 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
         $baseOrderDiscount = abs((float)$order->getData('base_discount_amount'));
         $baseShare = $baseOrderDiscount > self::EPSILON ? min(1.0, $docBaseDiscount / $baseOrderDiscount) : 0.0;
         $perRule = $this->documentRuleAmounts($document, $itemAmounts);
-        $carriesShipping = $this->carriesFirstShipping($document, $order);
 
         $result = [];
         foreach ($lines as $line) {
             $ruleId = $line->getRuleId();
             if ($line->getKind() === DiscountLineInterface::KIND_FREE_SHIPPING) {
-                if ($carriesShipping) {
-                    $result[] = $line;
+                $shipping = $this->shippingLine($line, $document, $order);
+                if ($shipping !== null) {
+                    $result[] = $shipping;
                 }
             } elseif ($ruleId !== null && $this->ruleHasItemRows($itemAmounts, $ruleId)) {
                 $amounts = $perRule[$ruleId] ?? ['amount' => 0.0, 'base_amount' => 0.0];
@@ -150,24 +169,30 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
     }
 
     /**
-     * Whether the document is the first invoice / credit memo that carries shipping.
+     * Scale the free shipping line by the document's share of the order shipping.
      *
+     * With no order shipping the zero "Free" line stays on invoices only.
+     *
+     * @param DiscountLineInterface $line
      * @param AbstractModel $document
      * @param AbstractModel $order
-     * @return bool
+     * @return DiscountLineInterface|null
      */
-    private function carriesFirstShipping(AbstractModel $document, AbstractModel $order): bool
-    {
-        $shipping = (float)$document->getData('shipping_amount');
-        if ($shipping <= self::EPSILON) {
-            return false;
+    private function shippingLine(
+        DiscountLineInterface $line,
+        AbstractModel $document,
+        AbstractModel $order
+    ): ?DiscountLineInterface {
+        $orderShipping = (float)$order->getData('shipping_amount');
+        $docShipping = (float)$document->getData('shipping_amount');
+        if ($orderShipping <= self::EPSILON) {
+            return $document instanceof Creditmemo ? null : $line;
         }
-        $field = $document instanceof Creditmemo ? 'shipping_refunded' : 'shipping_invoiced';
-        $already = (float)$order->getData($field);
-        if ($document->getId()) {
-            $already -= $shipping;
+        if ($docShipping <= self::EPSILON) {
+            return null;
         }
+        $ratio = min(1.0, $docShipping / $orderShipping);
 
-        return $already <= self::EPSILON;
+        return $line->withAmounts(round($line->getAmount() * $ratio, 2), round($line->getBaseAmount() * $ratio, 2));
     }
 }

@@ -84,6 +84,29 @@ class TotalsPluginTest extends TestCase
         $this->assertSame('Summer sale', (string)$result['pp_discount_line_1']->getLabel());
     }
 
+    public function testFooterAreaIsUntouched(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_COUPON, 5, 'SAVE10', 'SAVE10', 10.0, 10.0, 0),
+        ]);
+        $footer = [new DataObject(['code' => 'paid', 'value' => 1.0, 'label' => 'Paid'])];
+
+        $this->assertSame($footer, $this->plugin->afterGetTotals($this->block, $footer, 'footer'));
+    }
+
+    public function testReplacesInPlaceForEmptyArea(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_COUPON, 5, 'SAVE10', 'SAVE10', 10.0, 10.0, 0),
+        ]);
+        $core = array_values($this->coreTotals());
+
+        $result = $this->plugin->afterGetTotals($this->block, $core, '');
+
+        $codes = array_map(static fn(DataObject $row): string => $row->getCode(), $result);
+        $this->assertSame(['subtotal', 'pp_discount_line_0', 'shipping', 'grand_total'], array_values($codes));
+    }
+
     public function testOrderWithoutStoredLinesKeepsCoreRow(): void
     {
         $repository = $this->createMock(DiscountLineRepositoryInterface::class);

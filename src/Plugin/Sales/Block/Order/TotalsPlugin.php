@@ -52,6 +52,9 @@ class TotalsPlugin
         if (!is_array($result)) {
             return $result;
         }
+        if (!$this->hasDiscountRow($result)) {
+            return $result;
+        }
         try {
             $lines = $this->loadLines($subject);
             if ($lines === []) {
@@ -66,6 +69,23 @@ class TotalsPlugin
 
             return $result;
         }
+    }
+
+    /**
+     * Whether the totals contain the core discount row.
+     *
+     * @param array<int|string, DataObject> $totals
+     * @return bool
+     */
+    private function hasDiscountRow(array $totals): bool
+    {
+        foreach ($totals as $total) {
+            if ($total->getCode() === 'discount') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -113,7 +133,9 @@ class TotalsPlugin
     }
 
     /**
-     * Rebuild the ordered totals with the rows in place of the discount row.
+     * Rebuild the totals with the rows in place of the core discount row.
+     *
+     * Results without a discount row (e.g. the admin footer area) are returned unchanged.
      *
      * @param array<int|string, DataObject> $totals
      * @param array<string, DataObject> $rows
@@ -121,28 +143,23 @@ class TotalsPlugin
      */
     private function rebuild(array $totals, array $rows): array
     {
-        $hasDiscount = false;
+        $found = false;
         foreach ($totals as $total) {
-            $hasDiscount = $hasDiscount || $total->getCode() === 'discount';
+            $found = $found || $total->getCode() === 'discount';
+        }
+        if (!$found) {
+            return $totals;
         }
 
         $rebuilt = [];
-        $inserted = false;
         foreach ($totals as $key => $total) {
-            $code = (string)$total->getCode();
-            $insertHere = $hasDiscount
-                ? $code === 'discount'
-                : in_array($code, ['shipping', 'grand_total'], true);
-            if ($insertHere && !$inserted) {
+            if ($total->getCode() === 'discount') {
                 $rebuilt = $rebuilt + $rows;
-                $inserted = true;
-            }
-            if ($code === 'discount') {
                 continue;
             }
             $rebuilt[$key] = $total;
         }
 
-        return $inserted ? $rebuilt : $totals;
+        return $rebuilt;
     }
 }

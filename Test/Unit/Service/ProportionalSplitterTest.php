@@ -45,12 +45,19 @@ class ProportionalSplitterTest extends TestCase
     {
         $result = $this->splitter->split([$this->line(1, 3.33), $this->line(2, 6.67)], 3.34, 3.34);
 
-        $this->assertSame([3.33, 0.01], $this->amounts($result));
+        $this->assertSame(3.34, round(array_sum($this->amounts($result)), 2));
+    }
+
+    public function testLinesAreScaledDownToTarget(): void
+    {
+        $result = $this->splitter->split([$this->line(1, 1.0), $this->line(2, 1.0)], 0.5, 0.5);
+
+        $this->assertSame([0.25, 0.25], $this->amounts($result));
     }
 
     public function testRoundingRemainderGoesToLargestLine(): void
     {
-        $lines = [$this->line(1, 0.3333), $this->line(2, 0.3333), $this->line(3, 0.3333)];
+        $lines = [$this->line(1, 1 / 3), $this->line(2, 1 / 3), $this->line(3, 1 / 3)];
 
         $result = $this->splitter->split($lines, 1.0, 1.0);
 

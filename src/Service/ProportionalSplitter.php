@@ -19,19 +19,13 @@ class ProportionalSplitter implements ProportionalSplitterInterface
         }
 
         $lines = array_values($lines);
-        $amounts = [];
-        $baseAmounts = [];
-        foreach ($lines as $index => $line) {
-            $amounts[$index] = round($line->getAmount(), 2);
-            $baseAmounts[$index] = round($line->getBaseAmount(), 2);
-        }
-
-        $largest = $this->largestIndex($amounts);
-        $amounts[$largest] = max(0.0, round($amounts[$largest] + $targetTotal - array_sum($amounts), 2));
-        $largestBase = $this->largestIndex($baseAmounts);
-        $baseAmounts[$largestBase] = max(
-            0.0,
-            round($baseAmounts[$largestBase] + $baseTargetTotal - array_sum($baseAmounts), 2)
+        $amounts = $this->reconcile(
+            array_map(static fn(DiscountLineInterface $line): float => $line->getAmount(), $lines),
+            $targetTotal
+        );
+        $baseAmounts = $this->reconcile(
+            array_map(static fn(DiscountLineInterface $line): float => $line->getBaseAmount(), $lines),
+            $baseTargetTotal
         );
 
         $result = [];
@@ -40,6 +34,28 @@ class ProportionalSplitter implements ProportionalSplitterInterface
         }
 
         return $result;
+    }
+
+    /**
+     * Scale the values to the target, round to cents and give the rounding remainder to the largest value.
+     *
+     * @param float[] $values
+     * @param float $target
+     * @return float[]
+     */
+    private function reconcile(array $values, float $target): array
+    {
+        $target = round($target, 2);
+        $sum = array_sum($values);
+        if ($sum > 0.0) {
+            $scaled = array_map(static fn(float $value): float => round($value * $target / $sum, 2), $values);
+        } else {
+            $scaled = array_fill(0, count($values), 0.0);
+        }
+        $largest = $this->largestIndex($sum > 0.0 ? $values : $scaled);
+        $scaled[$largest] = round($scaled[$largest] + $target - array_sum($scaled), 2);
+
+        return $scaled;
     }
 
     /**
