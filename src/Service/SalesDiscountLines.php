@@ -35,11 +35,16 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
      */
     public function getLines(AbstractModel $source): array
     {
-        if (!isset($this->cache[$source])) {
-            $this->cache[$source] = $this->load($source);
+        if (isset($this->cache[$source])) {
+            return $this->cache[$source];
         }
 
-        return $this->cache[$source];
+        $lines = $this->load($source);
+        if ($lines !== []) {
+            $this->cache[$source] = $lines;
+        }
+
+        return $lines;
     }
 
     /**

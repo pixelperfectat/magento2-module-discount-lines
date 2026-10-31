@@ -294,7 +294,18 @@ class SalesDiscountLinesTest extends TestCase
     {
         $order = $this->createMock(Order::class);
         $order->method('getId')->willReturn(42);
-        $this->repository->expects($this->once())->method('getOrderLines')->willReturn([]);
+        $this->repository->expects($this->once())->method('getOrderLines')
+            ->willReturn([$this->line('coupon', 5, 2.0, 'CODE')]);
+
+        $this->service->getLines($order);
+        $this->service->getLines($order);
+    }
+
+    public function testEmptyResultIsNotMemoized(): void
+    {
+        $order = $this->createMock(Order::class);
+        $order->method('getId')->willReturn(42);
+        $this->repository->expects($this->exactly(2))->method('getOrderLines')->willReturn([]);
 
         $this->service->getLines($order);
         $this->service->getLines($order);
