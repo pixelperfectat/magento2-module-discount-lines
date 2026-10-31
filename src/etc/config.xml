@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <pp_discount_lines>
+            <general>
+                <enabled>1</enabled>
+            </general>
+            <display>
+                <variant>B</variant>
+            </display>
+            <documents>
+                <email_icon>0</email_icon>
+            </documents>
+        </pp_discount_lines>
+    </default>
+</config>

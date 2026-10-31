@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="pp_discount_lines" translate="label" type="text" sortOrder="302"
+                 showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Discount Lines</label>
+            <tab>sales</tab>
+            <resource>PixelPerfect_DiscountLines::config</resource>
+            <group id="general" translate="label" type="text" sortOrder="10"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>General</label>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Discount Lines</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Show itemised discount lines instead of one combined discount row.</comment>
+                </field>
+            </group>
+            <group id="display" translate="label" type="text" sortOrder="20"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Storefront Display</label>
+                <field id="variant" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Display Variant</label>
+                    <source_model>PixelPerfect\DiscountLines\Model\Config\Source\Variant</source_model>
+                    <comment>Applies to the cart, cart drawer and checkout.</comment>
+                </field>
+            </group>
+            <group id="documents" translate="label" type="text" sortOrder="30"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Sales Documents</label>
+                <field id="email_icon" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Show Icon in Emails</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Adds a small icon next to each discount line in emails.</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

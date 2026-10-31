@@ -1,0 +1,65 @@
+{
+    "name": "pixelperfectat/magento2-module-discount-lines",
+    "description": "Itemised discount lines (coupon, automatic, gift, free shipping) in cart, checkout and sales documents",
+    "type": "magento2-module",
+    "license": "MIT",
+    "prefer-stable": true,
+    "require": {
+        "magento/framework": "^103.0",
+        "magento/module-checkout": "^100.0",
+        "magento/module-quote": "^101.0",
+        "magento/module-sales": "^103.0",
+        "magento/module-sales-rule": "^101.0",
+        "php": "^8.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6",
+        "pixelperfectat/coding-standard": "^0.1.0"
+    },
+    "autoload": {
+        "files": [
+            "src/registration.php"
+        ],
+        "psr-4": {
+            "PixelPerfect\\DiscountLines\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PixelPerfect\\DiscountLines\\Test\\": "Test/"
+        }
+    },
+    "scripts": {
+        "lint": "parallel-lint --exclude vendor --exclude generated .",
+        "cs": "phpcs",
+        "cs:fix": "phpcbf",
+        "stan": "phpstan analyse",
+        "test": "phpunit",
+        "ci:validate": "@composer validate --no-check-publish",
+        "check": [
+            "@ci:validate",
+            "@lint",
+            "@cs",
+            "@stan",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "cweagans/composer-patches": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "ergebnis/composer-normalize": true,
+            "laminas/laminas-dependency-plugin": true,
+            "magento/*": true,
+            "php-http/discovery": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://repo.magento.com/"
+        }
+    ]
+}
