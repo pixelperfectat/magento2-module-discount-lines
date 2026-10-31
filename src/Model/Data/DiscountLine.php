@@ -135,19 +135,20 @@ readonly class DiscountLine implements DiscountLineInterface, \JsonSerializable
     }
 
     /**
-     * Serialise as the contract array.
+     * Serialise as the storefront shape: the contract keys plus sort_order, without `code` when it is null.
      *
-     * @return array{
-     *     kind: string,
-     *     rule_id: int|null,
-     *     code: string|null,
-     *     label: string,
-     *     amount: float,
-     *     base_amount: float
-     * }
+     * This is the same shape the REST serializer produces for the getters of the interface.
+     *
+     * @return array<string, int|float|string|null>
      */
     public function jsonSerialize(): array
     {
-        return $this->toArray();
+        $data = $this->toArray();
+        if ($data['code'] === null) {
+            unset($data['code']);
+        }
+        $data['sort_order'] = $this->sortOrder;
+
+        return $data;
     }
 }

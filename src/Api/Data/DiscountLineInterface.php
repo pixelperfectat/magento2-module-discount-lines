@@ -6,6 +6,10 @@ namespace PixelPerfect\DiscountLines\Api\Data;
 
 /**
  * One itemised discount line (one sales rule, one gift, ...).
+ *
+ * Storefront shape (identical in REST `extension_attributes.discount_lines[]` and the cart page checkout config):
+ * `kind`, `rule_id`, `label`, `amount`, `base_amount`, `sort_order`, plus `code` when the line has one (the key is
+ * omitted, not null, for lines without a code). Amounts are positive floats.
  */
 interface DiscountLineInterface
 {
