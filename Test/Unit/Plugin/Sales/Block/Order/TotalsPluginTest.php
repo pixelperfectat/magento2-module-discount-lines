@@ -151,6 +151,88 @@ class TotalsPluginTest extends TestCase
         $this->assertSame('Gift: FREEBIE', (string)$result['pp_discount_line_0']->getLabel());
     }
 
+    /**
+     * @return array<string, DataObject>
+     */
+    private function totalsWithoutDiscount(): array
+    {
+        $core = $this->coreTotals();
+        unset($core['discount']);
+
+        return $core;
+    }
+
+    public function testGiftOnlyOrderGetsRowInsertedForDefaultArea(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0, 0),
+        ]);
+
+        $result = $this->plugin->afterGetTotals($this->block, $this->totalsWithoutDiscount(), '');
+
+        $this->assertSame(
+            ['subtotal', 'shipping', 'pp_discount_line_0', 'grand_total'],
+            array_keys($result)
+        );
+        $this->assertSame('Gift: FREEBIE', (string)$result['pp_discount_line_0']->getLabel());
+        $this->assertSame(0.0, $result['pp_discount_line_0']->getValue());
+    }
+
+    public function testRowInsertedForNullArea(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0, 0),
+        ]);
+
+        $result = $this->plugin->afterGetTotals($this->block, $this->totalsWithoutDiscount());
+
+        $this->assertArrayHasKey('pp_discount_line_0', $result);
+    }
+
+    public function testFooterAreaStillUntouched(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0, 0),
+        ]);
+        $footer = ['paid' => new DataObject(['code' => 'paid', 'value' => 1.0, 'label' => 'Paid'])];
+
+        $this->assertSame($footer, $this->plugin->afterGetTotals($this->block, $footer, 'footer'));
+        $core = $this->totalsWithoutDiscount();
+        $this->assertSame($core, $this->plugin->afterGetTotals($this->block, $core, 'footer'));
+    }
+
+    public function testNoRowInsertedWhenSourceHasDiscount(): void
+    {
+        $order = $this->createMock(Order::class);
+        $order->method('getId')->willReturn(42);
+        $order->method('getStoreId')->willReturn(1);
+        $order->method('getData')->willReturnMap([['discount_amount', null, -3.0]]);
+        $block = $this->createMock(Totals::class);
+        $block->method('getSource')->willReturn($order);
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0, 0),
+        ]);
+        $core = $this->totalsWithoutDiscount();
+
+        $this->assertSame($core, $this->plugin->afterGetTotals($block, $core, ''));
+    }
+
+    public function testNoRowInsertedWithoutStoredLines(): void
+    {
+        $repository = $this->createMock(DiscountLineRepositoryInterface::class);
+        $repository->method('hasLines')->willReturn(false);
+        $plugin = new TotalsPlugin(
+            $this->config,
+            $repository,
+            $this->salesLines,
+            new DocumentLineLabel(),
+            $this->createMock(LoggerInterface::class)
+        );
+        $core = $this->totalsWithoutDiscount();
+
+        $this->assertSame($core, $plugin->afterGetTotals($this->block, $core, ''));
+    }
+
     public function testExceptionKeepsCoreRows(): void
     {
         $this->salesLines->method('getLines')->willThrowException(new \RuntimeException('boom'));

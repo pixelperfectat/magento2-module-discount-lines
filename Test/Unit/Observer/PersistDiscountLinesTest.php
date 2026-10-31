@@ -194,6 +194,33 @@ class PersistDiscountLinesTest extends TestCase
         $this->observer->execute($event);
     }
 
+    public function testGiftLineIsStoredOnOrderLevelOnly(): void
+    {
+        $this->quoteLines->method('getLines')->willReturn([
+            $this->line(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0),
+        ]);
+        $event = $this->event(
+            [$this->orderItem(901, 11)],
+            [$this->quoteItem(11, [$this->discount(9, 0.0, 0.0)])]
+        );
+
+        $this->repository->expects($this->once())->method('saveForOrder')->with(
+            500,
+            [[
+                'order_item_id' => null,
+                'rule_id' => 9,
+                'kind' => 'gift',
+                'code' => 'FREEBIE',
+                'label' => 'FREEBIE',
+                'amount' => 0.0,
+                'base_amount' => 0.0,
+                'sort_order' => 0,
+            ]]
+        );
+
+        $this->observer->execute($event);
+    }
+
     public function testLabelsSnapshotted(): void
     {
         $this->quoteLines->method('getLines')->willReturn([

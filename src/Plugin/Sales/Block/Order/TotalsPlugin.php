@@ -52,13 +52,17 @@ class TotalsPlugin
         if (!is_array($result)) {
             return $result;
         }
-        if (!$this->hasDiscountRow($result)) {
+        $hasRow = $this->hasDiscountRow($result);
+        if (!$hasRow && !$this->mayInsert($area)) {
             return $result;
         }
         try {
             $lines = $this->loadLines($subject);
             if ($lines === []) {
                 return $result;
+            }
+            if (!$hasRow) {
+                return $this->insertRows($subject, $result, $this->buildRows($lines));
             }
 
             return $this->rebuild($result, $this->buildRows($lines));
@@ -69,6 +73,46 @@ class TotalsPlugin
 
             return $result;
         }
+    }
+
+    /**
+     * Rows may only be inserted into the default area: admin renders 'footer' and '' separately.
+     *
+     * @param array<int|string, mixed>|string|null $area
+     * @return bool
+     */
+    private function mayInsert($area): bool
+    {
+        return $area === null || $area === '';
+    }
+
+    /**
+     * Insert the rows when core produced no discount row because the document discount is 0 (gift or free shipping).
+     *
+     * @param Totals $block
+     * @param array<int|string, DataObject> $totals
+     * @param array<string, DataObject> $rows
+     * @return array<int|string, DataObject>
+     */
+    private function insertRows(Totals $block, array $totals, array $rows): array
+    {
+        /** @var AbstractModel|null $source Order, invoice or credit memo depending on the block subclass */
+        $source = $block->getSource();
+        if ($source === null || abs((float)$source->getData('discount_amount')) > 0.00001) {
+            return $totals;
+        }
+
+        $rebuilt = [];
+        $inserted = false;
+        foreach ($totals as $key => $total) {
+            if (!$inserted && in_array($total->getCode(), ['tax', 'grand_total'], true)) {
+                $rebuilt = $rebuilt + $rows;
+                $inserted = true;
+            }
+            $rebuilt[$key] = $total;
+        }
+
+        return $inserted ? $rebuilt : $totals + $rows;
     }
 
     /**

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace PixelPerfect\DiscountLines\Test\Unit\Plugin\Quote;
 
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Api\CartTotalRepositoryInterface;
 use Magento\Quote\Api\Data\TotalSegmentExtension;
 use Magento\Quote\Api\Data\TotalSegmentExtensionFactory;
 use Magento\Quote\Api\Data\TotalSegmentExtensionInterface;
 use Magento\Quote\Api\Data\TotalSegmentInterface;
+use Magento\Quote\Api\Data\TotalSegmentInterfaceFactory;
 use Magento\Quote\Api\Data\TotalsInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
@@ -30,6 +32,9 @@ if (!class_exists(TotalSegmentExtension::class)) {
 if (!class_exists(TotalSegmentExtensionFactory::class)) {
     require_once __DIR__ . '/../../../Stub/TotalSegmentExtensionFactory.php';
 }
+if (!class_exists(TotalSegmentInterfaceFactory::class)) {
+    require_once __DIR__ . '/../../../Stub/TotalSegmentInterfaceFactory.php';
+}
 
 class CartTotalRepositoryPluginTest extends TestCase
 {
@@ -38,6 +43,10 @@ class CartTotalRepositoryPluginTest extends TestCase
     private ConfigInterface&MockObject $config;
     private QuoteLineStoreInterface&MockObject $store;
     private LoggerInterface&MockObject $logger;
+    private ScopeConfigInterface&MockObject $scopeConfig;
+    private TotalSegmentInterfaceFactory $segmentFactory;
+    /** @var TotalSegmentInterface[] */
+    private array $created = [];
     private Quote&MockObject $quote;
     private CartTotalRepositoryPlugin $plugin;
 
@@ -58,12 +67,24 @@ class CartTotalRepositoryPluginTest extends TestCase
         $this->quote->method('getStoreId')->willReturn(1);
         $repository = $this->createMock(CartRepositoryInterface::class);
         $repository->method('getActive')->willReturn($this->quote);
+        $this->scopeConfig = $this->createMock(ScopeConfigInterface::class);
+        $this->scopeConfig->method('getValue')->willReturn(
+            ['subtotal' => 10, 'discount' => 20, 'shipping' => 30, 'tax' => 40, 'grand_total' => 100]
+        );
+        $this->segmentFactory = new TotalSegmentInterfaceFactory(function (): TotalSegmentInterface {
+            $segment = $this->segment(0.0);
+            $this->created[] = $segment;
+
+            return $segment;
+        });
         $this->plugin = new CartTotalRepositoryPlugin(
             $repository,
             $this->config,
             $this->store,
             new TotalSegmentExtensionFactory(),
-            $this->logger
+            $this->logger,
+            $this->segmentFactory,
+            $this->scopeConfig
         );
     }
 
@@ -99,8 +120,17 @@ class CartTotalRepositoryPluginTest extends TestCase
      */
     private function totals(array $segments): TotalsInterface&MockObject
     {
+        $holder = new \stdClass();
+        $holder->segments = $segments;
         $totals = $this->createMock(TotalsInterface::class);
-        $totals->method('getTotalSegments')->willReturn($segments);
+        $totals->method('getTotalSegments')->willReturnCallback(static fn() => $holder->segments);
+        $totals->method('setTotalSegments')->willReturnCallback(
+            static function (array $new) use ($holder, $totals) {
+                $holder->segments = $new;
+
+                return $totals;
+            }
+        );
 
         return $totals;
     }
@@ -180,7 +210,9 @@ class CartTotalRepositoryPluginTest extends TestCase
             $config,
             $this->store,
             new TotalSegmentExtensionFactory(),
-            $this->logger
+            $this->logger,
+            $this->segmentFactory,
+            $this->scopeConfig
         );
         $this->store->expects($this->never())->method('load');
         $this->quote->expects($this->never())->method('collectTotals');
@@ -208,10 +240,63 @@ class CartTotalRepositoryPluginTest extends TestCase
         $this->assertStringNotContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
     }
 
+    public function testGiftOnlyQuoteGetsZeroDiscountSegmentWithLines(): void
+    {
+        $gift = [new DiscountLine('gift', 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0)];
+        $this->store->method('load')->willReturn($gift);
+        $totals = $this->totals([
+            'subtotal' => $this->segment(100.0),
+            'shipping' => $this->segment(5.0),
+            'grand_total' => $this->segment(105.0),
+        ]);
+
+        $this->process($totals);
+
+        $segments = $totals->getTotalSegments();
+        $this->assertSame(['subtotal', 'discount', 'shipping', 'grand_total'], array_keys($segments));
+        $this->assertSame($this->created[0], $segments['discount']);
+        $this->assertSame($gift, $segments['discount']->getExtensionAttributes()->getDiscountLines());
+        $this->assertSame('Discount (FREEBIE)', $segments['discount']->getTitle());
+    }
+
+    public function testMissingSegmentFallsBackToBeforeShippingWithoutSortConfig(): void
+    {
+        $scopeConfig = $this->createMock(ScopeConfigInterface::class);
+        $scopeConfig->method('getValue')->willReturn(null);
+        $repository = $this->createMock(CartRepositoryInterface::class);
+        $repository->method('getActive')->willReturn($this->quote);
+        $plugin = new CartTotalRepositoryPlugin(
+            $repository,
+            $this->config,
+            $this->store,
+            new TotalSegmentExtensionFactory(),
+            $this->logger,
+            $this->segmentFactory,
+            $scopeConfig
+        );
+        $this->store->method('load')->willReturn([new DiscountLine('free_shipping', 3, 'SHIP', 'SHIP', 0.0, 0.0)]);
+        $totals = $this->totals(['subtotal' => $this->segment(1.0), 'shipping' => $this->segment(0.0)]);
+
+        $plugin->afterGet($this->createMock(CartTotalRepositoryInterface::class), $totals, 7);
+
+        $this->assertSame(['subtotal', 'discount', 'shipping'], array_keys($totals->getTotalSegments()));
+    }
+
+    public function testNoSegmentAddedWithoutStoredLines(): void
+    {
+        $this->store->method('load')->willReturn([]);
+        $totals = $this->totals(['subtotal' => $this->segment(100.0)]);
+
+        $this->process($totals);
+
+        $this->assertSame(['subtotal'], array_keys($totals->getTotalSegments()));
+        $this->assertSame([], $this->created);
+    }
+
     public function testNoChangeWithoutDiscountSegment(): void
     {
         $subtotal = $this->segment(100.0);
-        $this->store->expects($this->never())->method('load');
+        $this->store->method('load')->willReturn([]);
 
         $this->process($this->totals(['subtotal' => $subtotal]));
 

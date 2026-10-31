@@ -76,7 +76,12 @@ class PersistDiscountLines implements ObserverInterface
         $byRule = [];
         foreach ($lines as $line) {
             $rows[] = $this->row(null, $line, $line->getAmount(), $line->getBaseAmount());
-            if ($line->getRuleId() !== null && $line->getKind() !== DiscountLineInterface::KIND_FREE_SHIPPING) {
+            // Item rows only for money lines: a gift line (amount 0) lives on the order level only.
+            if (
+                $line->getRuleId() !== null
+                && $line->getKind() !== DiscountLineInterface::KIND_FREE_SHIPPING
+                && ($line->getAmount() > 0.0 || $line->getBaseAmount() > 0.0)
+            ) {
                 $byRule[$line->getRuleId()] = $line;
             }
         }
