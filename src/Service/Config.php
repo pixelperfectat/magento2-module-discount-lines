@@ -8,6 +8,9 @@ use PixelPerfect\DiscountLines\Api\ConfigInterface;
 
 readonly class Config implements ConfigInterface
 {
+    /**
+     * @param ScopeConfigInterface $scopeConfig
+     */
     public function __construct(
         private ScopeConfigInterface $scopeConfig
     ) {
