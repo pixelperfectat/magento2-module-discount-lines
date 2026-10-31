@@ -184,4 +184,49 @@ class QuoteDiscountLinesTest extends TestCase
         $this->assertSame(1.0, $lines[0]->getAmount());
         $this->assertSame(4.02, $lines[1]->getAmount());
     }
+
+    public function testOvershootBeyondCapFallsBackToCoreRow(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        // lines claim 7.00 while Magento booked 5.00: never show more than the real discount
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('coupon', 1, 'X', 'X', 4.0, 4.0),
+            new DiscountLine('automatic', 2, null, 'A', 3.0, 3.0),
+        ]);
+
+        $this->assertSame([], $this->service->getLines($this->quote(-5.0)));
+    }
+
+    public function testOppositeSignsOfDiffAndBaseDiffFallBackToCoreRow(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('coupon', 1, 'X', 'X', 3.0, 6.0),
+        ]);
+
+        // diff +2.00, baseDiff -1.00
+        $this->assertSame([], $this->service->getLines($this->quote(-5.0)));
+    }
+
+    public function testOnlyBaseDiffBeyondCapFallsBackToCoreRow(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('coupon', 1, 'X', 'X', 3.0, 5.0),
+        ]);
+
+        // diff +2.00 beyond the cap, baseDiff 0.00
+        $this->assertSame([], $this->service->getLines($this->quote(-5.0)));
+    }
+
+    public function testOnlyDiffBeyondCapFallsBackToCoreRow(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('coupon', 1, 'X', 'X', 5.0, 3.0),
+        ]);
+
+        // diff 0.00, baseDiff +2.00 beyond the cap
+        $this->assertSame([], $this->service->getLines($this->quote(-5.0)));
+    }
 }

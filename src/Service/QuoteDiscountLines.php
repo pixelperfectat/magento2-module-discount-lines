@@ -84,8 +84,9 @@ class QuoteDiscountLines implements QuoteDiscountLinesInterface
     /**
      * Make ALL lines add up to the address discount to the cent.
      *
-     * A rounding difference (at most 0.01 per line) goes to the largest line; a bigger positive remainder that no
-     * rule accounts for becomes its own generic line instead of inflating a rule's amount.
+     * A rounding difference (at most 0.01 per line) goes to the largest line; a bigger positive remainder (in both
+     * currencies) that no rule accounts for becomes its own generic line instead of inflating a rule's amount. Any
+     * other gap (lines above the total, diff and base diff disagreeing) yields no lines, so the core row is shown.
      *
      * @param DiscountLineInterface[] $lines
      * @param float $total
@@ -117,7 +118,10 @@ class QuoteDiscountLines implements QuoteDiscountLinesInterface
                 round($lines[$largest]->getAmount() + $diff, 2),
                 round($lines[$largest]->getBaseAmount() + $baseDiff, 2)
             );
-        } elseif ($diff > 0.0 && $baseDiff >= 0.0) {
+
+            return $lines;
+        }
+        if ($diff > $cap && $baseDiff > $cap) {
             $lines[] = new DiscountLine(
                 DiscountLineInterface::KIND_AUTOMATIC,
                 null,
@@ -126,8 +130,11 @@ class QuoteDiscountLines implements QuoteDiscountLinesInterface
                 $diff,
                 $baseDiff
             );
+
+            return $lines;
         }
 
-        return $lines;
+        // Overshoot, opposite signs or only one currency beyond the cap: no trustworthy lines, core row instead.
+        return [];
     }
 }
