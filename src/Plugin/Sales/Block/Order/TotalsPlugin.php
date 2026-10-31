@@ -53,6 +53,7 @@ class TotalsPlugin
             return $result;
         }
         try {
+            $this->cleanShippingLabel($subject, $result);
             $hasRow = $this->hasDiscountRow($result);
             if (!$hasRow && !$this->mayInsert($area)) {
                 return $result;
@@ -77,6 +78,36 @@ class TotalsPlugin
             ]);
 
             return $result;
+        }
+    }
+
+    /**
+     * Remove the rule description core appends to the shipping label of documents without a discount row.
+     *
+     * Core (`Totals::addShippingTotal`) labels shipping "Shipping & Handling (<discount description>)" when the
+     * document has no discount row and no coupon code, which is the case for zero-discount gift or free shipping
+     * orders and their invoices and credit memos. A coupon code in the label is safe and kept.
+     *
+     * @param Totals $block
+     * @param array<int|string, DataObject> $totals
+     * @return void
+     */
+    private function cleanShippingLabel(Totals $block, array $totals): void
+    {
+        /** @var AbstractModel|null $source Order, invoice or credit memo depending on the block subclass */
+        $source = $block->getSource();
+        if ($source === null || !$this->config->isEnabled((int)$source->getStoreId())) {
+            return;
+        }
+        $description = (string)$source->getData('discount_description');
+        if ($description === '') {
+            return;
+        }
+        $plain = (string)__('Shipping & Handling');
+        foreach ($totals as $total) {
+            if ($total->getCode() === 'shipping' && (string)$total->getLabel() === $plain . ' (' . $description . ')') {
+                $total->setData('label', $plain);
+            }
         }
     }
 

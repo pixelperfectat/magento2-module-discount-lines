@@ -277,6 +277,90 @@ class TotalsPluginTest extends TestCase
         $this->assertSame('Discount (Legacy label)', (string)$result['discount']->getLabel());
     }
 
+    private function blockWithDescription(string $description, bool $hasLines = true): Totals&MockObject
+    {
+        $source = $this->createMock(Order::class);
+        $source->method('getId')->willReturn(42);
+        $source->method('getStoreId')->willReturn(1);
+        $source->method('getData')->willReturnMap([
+            ['discount_description', null, $description],
+            ['discount_amount', null, 0.0],
+        ]);
+        $block = $this->createMock(Totals::class);
+        $block->method('getSource')->willReturn($source);
+
+        return $block;
+    }
+
+    /**
+     * @return array<string, DataObject>
+     */
+    private function totalsWithShippingLabel(string $label): array
+    {
+        $core = $this->totalsWithoutDiscount();
+        $core['shipping']->setLabel($label);
+
+        return $core;
+    }
+
+    public function testRuleDescriptionIsRemovedFromTheShippingLabel(): void
+    {
+        // core appends the discount description to the shipping label when the document has no discount row
+        $this->salesLines->method('getLines')->willReturn([]);
+        $core = $this->totalsWithShippingLabel('Shipping & Handling (INTERNAL description)');
+
+        $result = $this->plugin->afterGetTotals($this->blockWithDescription('INTERNAL description'), $core);
+
+        $this->assertSame('Shipping & Handling', (string)$result['shipping']->getLabel());
+        $this->assertSame(5.0, $result['shipping']->getValue());
+    }
+
+    public function testRuleDescriptionIsRemovedFromTheShippingLabelOfOrdersWithoutLines(): void
+    {
+        $repository = $this->createMock(DiscountLineRepositoryInterface::class);
+        $repository->method('hasLines')->willReturn(false);
+        $plugin = new TotalsPlugin(
+            $this->config,
+            $repository,
+            $this->salesLines,
+            new DocumentLineLabel(),
+            $this->createMock(LoggerInterface::class)
+        );
+        $core = $this->totalsWithShippingLabel('Shipping & Handling (INTERNAL description)');
+
+        $result = $plugin->afterGetTotals($this->blockWithDescription('INTERNAL description'), $core);
+
+        $this->assertSame('Shipping & Handling', (string)$result['shipping']->getLabel());
+    }
+
+    public function testCouponCodeInTheShippingLabelIsKept(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([]);
+        $core = $this->totalsWithShippingLabel('Shipping & Handling (SHIPFREE)');
+
+        $result = $this->plugin->afterGetTotals($this->blockWithDescription('INTERNAL description'), $core);
+
+        $this->assertSame('Shipping & Handling (SHIPFREE)', (string)$result['shipping']->getLabel());
+    }
+
+    public function testShippingLabelIsUntouchedWhenDisabled(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('isEnabled')->willReturn(false);
+        $plugin = new TotalsPlugin(
+            $config,
+            $this->repository,
+            $this->salesLines,
+            new DocumentLineLabel(),
+            $this->createMock(LoggerInterface::class)
+        );
+        $core = $this->totalsWithShippingLabel('Shipping & Handling (INTERNAL description)');
+
+        $result = $plugin->afterGetTotals($this->blockWithDescription('INTERNAL description'), $core);
+
+        $this->assertSame('Shipping & Handling (INTERNAL description)', (string)$result['shipping']->getLabel());
+    }
+
     public function testExceptionKeepsCoreRows(): void
     {
         $this->salesLines->method('getLines')->willThrowException(new \RuntimeException('boom'));

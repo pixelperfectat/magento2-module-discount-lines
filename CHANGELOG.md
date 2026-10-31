@@ -26,4 +26,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   order lines show the core amount with the plain label "Discount".
 - PDFs print "Gift" / "Free" for zero-amount gift and free shipping lines; coupon free shipping lines are labelled
   "Coupon CODE"; gift lines with a coupon code are removable.
+- The shipping row label of orders, invoices and credit memos no longer carries the rule description core appends
+  when a document has no discount row.
 - Requires `magento/module-store` and `magento/module-tax` instead of `magento/module-checkout`.

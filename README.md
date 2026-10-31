@@ -104,6 +104,10 @@ is deleted or relabelled later does not change existing orders.
   largest line absorbs the rounding remainder, so the lines always equal the document's discount total. Stored order
   lines that do not add up to the order discount are scaled to it. When a document gets no line although the order
   has lines (for example a shipping-only refund), the core row keeps its amount and gets the plain label "Discount".
+- **Shipping label.** Core appends the discount description (the rule description) to the shipping row label when a
+  document has no discount row and no coupon code (zero-discount gift or free shipping orders, their invoices and
+  credit memos: "Shipping & Handling (…)"). While the module is enabled, the plugin restores the plain
+  "Shipping & Handling" label on every order, invoice and credit memo; a coupon code in the label is kept.
 - **PDF total.** A PDF total model for `discount` (`etc/pdf.xml`) prints one line per rule in invoice and credit memo
   PDFs; zero-amount gift and free shipping lines print "Gift" / "Free" in the amount column.
 
