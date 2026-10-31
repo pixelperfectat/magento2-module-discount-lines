@@ -5,6 +5,8 @@
                 type="PixelPerfect\DiscountLines\Service\Config"/>
     <preference for="PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface"
                 type="PixelPerfect\DiscountLines\Model\Data\DiscountLine"/>
+    <preference for="PixelPerfect\DiscountLines\Api\DiscountLineRepositoryInterface"
+                type="PixelPerfect\DiscountLines\Model\DiscountLineRepository"/>
     <preference for="PixelPerfect\DiscountLines\Api\Service\LabelResolverInterface"
                 type="PixelPerfect\DiscountLines\Service\LabelResolver"/>
     <preference for="PixelPerfect\DiscountLines\Api\Service\RuleLoaderInterface"
