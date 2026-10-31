@@ -80,22 +80,32 @@ is deleted or relabelled later does not change existing orders.
 ## How it works
 
 - **Quote address storage at collect time.** After the totals of an address are collected, the per-rule lines are
-  resolved (one resolver per `simple_action`, in a composite that adapters extend through `di.xml`) and stored on the
-  quote address (`quote_address.pp_discount_lines`). The invariant is that the lines sum to the address discount;
-  rounding differences of up to one cent per line are absorbed by the largest line, anything larger becomes a generic
-  "Discount" line instead of being misattributed to a rule.
+  resolved and stored on the quote address (`quote_address.pp_discount_lines`). Resolution is one generic rule
+  resolver (`RuleDiscountResolver`, reads core's per-rule discount breakdown of the address, so it covers every
+  `simple_action` including `by_percent`, `by_fixed`, `cart_fixed` and `buy_x_get_y`) plus a free shipping resolver,
+  both in a composite (`CompositeResolver`) that is the extension point: adapters add their own named resolvers to it
+  through `di.xml`. The invariant is that the lines sum to the address discount; rounding differences of up to one
+  cent per line are absorbed by the largest line, a larger unattributed remainder becomes a generic "Discount" line
+  instead of being misattributed to a rule, and lines above the discount (or disagreeing between order and base
+  currency) are dropped so the core row is shown with the plain title "Discount". A failed collect clears the stored
+  lines.
 - **Totals segment extension attribute.** A plugin on `CartTotalRepositoryInterface` adds the lines to the `discount`
   total segment as `extension_attributes.discount_lines` and replaces the segment title (which carries the rule
   description in core). When a quote has only zero-value lines (a gift or free shipping), a zero `discount` segment is
-  added so renderers still get the lines. Mini-cart and checkout renderers read this attribute.
+  added so renderers still get the lines. Stored lines that do not add up to the segment value are not exposed (the
+  title is the plain "Discount"). The cart page and checkout renderers read this attribute.
 - **Persistence at order placement.** On `sales_model_service_quote_submit_success` the lines are written to the table
   `pp_discount_line`: order-level lines plus item-level per-rule amounts (these make the credit memo split possible).
+  When a discounted order has no attributable lines, one generic `automatic` "Discount" line for the full amount is
+  stored, so the order never falls back to the core label.
 - **Totals-block plugin.** A plugin on `Magento\Sales\Block\Order\Totals` (order, invoice and credit memo blocks, so
   emails, My Account and the admin) replaces the core `discount` row by one row per line. An invoice scales the stored
   lines to the invoice discount; a credit memo splits each rule in proportion to the refunded quantities and the
-  largest line absorbs the rounding remainder, so the lines always equal the document's discount total.
+  largest line absorbs the rounding remainder, so the lines always equal the document's discount total. Stored order
+  lines that do not add up to the order discount are scaled to it. When a document gets no line although the order
+  has lines (for example a shipping-only refund), the core row keeps its amount and gets the plain label "Discount".
 - **PDF total.** A PDF total model for `discount` (`etc/pdf.xml`) prints one line per rule in invoice and credit memo
-  PDFs.
+  PDFs; zero-amount gift and free shipping lines print "Gift" / "Free" in the amount column.
 
 Orders without stored lines (placed before the module was installed, or while it was disabled) are never touched and
 keep the merged core row.
@@ -125,9 +135,21 @@ discount_line = {
 - Builder's call: expose the same array on the cart totals extension attributes
   (`TotalSegmentExtensionInterface`) for the storefront renderers.
 
+Notes for consumers:
+
+- Detect a discount line by the **`discount_line` data key** on any totals row, not by the row code: the row codes
+  of this package are `pp_discount_line_<n>`, while gift card rows of the Mageplaza adapter keep Mageplaza's own codes
+  (`gift_card` / `gift_card_<n>`) and carry `discount_line` with kind `gift_card`.
+- A row without `discount_line` is a core row; the `discount` row of an order with stored lines carries the plain label
+  "Discount", never the rule description.
+- `DocumentLineLabelInterface` gives the plain label (`format()`), the signed value (`value()`) and the text printed in
+  place of a zero amount (`amountText()`: "Gift" / "Free").
+
 ## Extending
 
-- Add a line kind or a `simple_action` by adding a `DiscountLineResolverInterface` to the composite in `di.xml`.
+- Add a line kind or handle a custom `simple_action` by adding a named `DiscountLineResolverInterface` to the
+  `resolvers` argument of `CompositeResolver` in `di.xml`. An entry that does not implement the interface is skipped
+  and logged, never thrown.
 - All services are behind interfaces in `Api/Service/` and bound by `<preference>`.
 - Colours and fonts of the storefront renderers are CSS custom properties in
   `PixelPerfect_DiscountLines::css/discount-lines.css`; override them on `:root` in your theme.
