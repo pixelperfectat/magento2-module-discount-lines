@@ -16,6 +16,18 @@
     <preference for="PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface"
                 type="PixelPerfect\DiscountLines\Service\Resolver\CompositeResolver"/>
 
+    <preference for="PixelPerfect\DiscountLines\Api\Service\ProportionalSplitterInterface"
+                type="PixelPerfect\DiscountLines\Service\ProportionalSplitter"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Service\SalesDiscountLinesInterface"
+                type="PixelPerfect\DiscountLines\Service\SalesDiscountLines"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Service\DocumentLineLabelInterface"
+                type="PixelPerfect\DiscountLines\Service\DocumentLineLabel"/>
+
+    <type name="Magento\Sales\Block\Order\Totals">
+        <plugin name="pp_discount_lines_totals"
+                type="PixelPerfect\DiscountLines\Plugin\Sales\Block\Order\TotalsPlugin"/>
+    </type>
+
     <type name="PixelPerfect\DiscountLines\Service\Resolver\CompositeResolver">
         <arguments>
             <argument name="resolvers" xsi:type="array">
