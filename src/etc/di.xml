@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="PixelPerfect\DiscountLines\Api\ConfigInterface"
+                type="PixelPerfect\DiscountLines\Service\Config"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface"
+                type="PixelPerfect\DiscountLines\Model\Data\DiscountLine"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Service\LabelResolverInterface"
+                type="PixelPerfect\DiscountLines\Service\LabelResolver"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Service\RuleLoaderInterface"
+                type="PixelPerfect\DiscountLines\Service\RuleLoader"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Service\QuoteDiscountLinesInterface"
+                type="PixelPerfect\DiscountLines\Service\QuoteDiscountLines"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface"
+                type="PixelPerfect\DiscountLines\Service\Resolver\CompositeResolver"/>
+
+    <type name="PixelPerfect\DiscountLines\Service\Resolver\CompositeResolver">
+        <arguments>
+            <argument name="resolvers" xsi:type="array">
+                <item name="rule_discounts" xsi:type="object">
+                    PixelPerfect\DiscountLines\Service\Resolver\RuleDiscountResolver
+                </item>
+                <item name="free_shipping" xsi:type="object">
+                    PixelPerfect\DiscountLines\Service\Resolver\FreeShippingResolver
+                </item>
+            </argument>
+        </arguments>
+    </type>
+</config>
