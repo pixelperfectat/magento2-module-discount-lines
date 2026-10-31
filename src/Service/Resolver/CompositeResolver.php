@@ -4,27 +4,42 @@ declare(strict_types=1);
 
 namespace PixelPerfect\DiscountLines\Service\Resolver;
 
-use Magento\Framework\Exception\LocalizedException;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
 use PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface;
+use Psr\Log\LoggerInterface;
 
+/**
+ * Runs the named resolvers injected via di.xml and concatenates their lines.
+ *
+ * A misconfigured entry is skipped and logged: it runs during totals collection and must never break checkout.
+ */
 class CompositeResolver implements DiscountLineResolverInterface
 {
+    /** @var DiscountLineResolverInterface[] */
+    private readonly array $resolvers;
+
     /**
-     * @param DiscountLineResolverInterface[] $resolvers Named strategies, keyed in di.xml
-     * @throws LocalizedException
+     * @param LoggerInterface $logger
+     * @param array<string, mixed> $resolvers Named strategies, keyed in di.xml
      */
     public function __construct(
-        private readonly array $resolvers = []
+        LoggerInterface $logger,
+        array $resolvers = []
     ) {
-        foreach ($this->resolvers as $name => $resolver) {
+        $valid = [];
+        foreach ($resolvers as $name => $resolver) {
             if (!$resolver instanceof DiscountLineResolverInterface) {
-                throw new LocalizedException(
-                    __('Discount line resolver "%1" must implement %2.', $name, DiscountLineResolverInterface::class)
-                );
+                $logger->error(sprintf(
+                    'Discount lines: resolver "%s" does not implement %s and is skipped.',
+                    $name,
+                    DiscountLineResolverInterface::class
+                ));
+                continue;
             }
+            $valid[$name] = $resolver;
         }
+        $this->resolvers = $valid;
     }
 
     /**
