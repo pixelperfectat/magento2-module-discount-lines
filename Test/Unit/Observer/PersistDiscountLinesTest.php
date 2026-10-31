@@ -87,9 +87,11 @@ class PersistDiscountLinesTest extends TestCase
      * @param OrderItem[] $orderItems
      * @param QuoteItem[] $quoteItems
      */
-    private function event(array $orderItems, array $quoteItems): Observer
+    private function event(array $orderItems, array $quoteItems, float $discount = 0.0): Observer
     {
         $order = $this->createMock(Order::class);
+        $order->method('getDiscountAmount')->willReturn(-$discount);
+        $order->method('getBaseDiscountAmount')->willReturn(-$discount);
         $order->method('getEntityId')->willReturn(500);
         $order->method('getStoreId')->willReturn(1);
         $order->method('getAllItems')->willReturn($orderItems);
@@ -263,6 +265,33 @@ class PersistDiscountLinesTest extends TestCase
         $this->repository->expects($this->never())->method('saveForOrder');
 
         $this->observer->execute($this->event([], []));
+    }
+
+    public function testUnattributableDiscountedOrderStoresOneGenericLine(): void
+    {
+        $this->quoteLines->method('getLines')->willReturn([]);
+        $captured = null;
+        $this->repository->expects($this->once())->method('saveForOrder')->willReturnCallback(
+            function (int $id, array $rows) use (&$captured): void {
+                $captured = [$id, $rows];
+            }
+        );
+
+        $this->observer->execute($this->event([$this->orderItem(901, 11)], [], 7.5));
+
+        $this->assertSame(
+            [500, [[
+                'order_item_id' => null,
+                'rule_id' => null,
+                'kind' => 'automatic',
+                'code' => null,
+                'label' => 'Discount',
+                'amount' => 7.5,
+                'base_amount' => 7.5,
+                'sort_order' => 0,
+            ]]],
+            $captured
+        );
     }
 
     public function testRepositoryFailureIsLoggedAndSwallowed(): void

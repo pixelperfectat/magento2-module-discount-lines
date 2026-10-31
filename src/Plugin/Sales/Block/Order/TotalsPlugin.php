@@ -58,8 +58,13 @@ class TotalsPlugin
                 return $result;
             }
             $lines = $this->loadLines($subject);
-            if ($lines === []) {
+            if ($lines === null) {
                 return $result;
+            }
+            if ($lines === []) {
+                // Stored lines, but none for this document (e.g. a shipping-only refund): keep the core amount,
+                // never its label, which carries the rule description.
+                return $hasRow ? $this->relabel($result) : $result;
             }
             if (!$hasRow) {
                 return $this->insertRows($subject, $result, $lines);
@@ -139,21 +144,41 @@ class TotalsPlugin
     }
 
     /**
-     * Load the lines for the block source, empty when the module is off or nothing is stored.
+     * Give the core discount row the plain label, value unchanged.
+     *
+     * @param array<int|string, DataObject> $totals
+     * @return array<int|string, DataObject>
+     */
+    private function relabel(array $totals): array
+    {
+        foreach ($totals as $total) {
+            if ($total->getCode() === 'discount') {
+                $total->setData('label', (string)__('Discount'));
+            }
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Load the lines for the block source.
+     *
+     * Null when the module is off or the order has no stored lines (core row untouched), an empty array when the
+     * order has lines but the document gets none.
      *
      * @param Totals $block
-     * @return DiscountLineInterface[]
+     * @return DiscountLineInterface[]|null
      */
-    private function loadLines(Totals $block): array
+    private function loadLines(Totals $block): ?array
     {
         /** @var AbstractModel|null $source Order, invoice or credit memo depending on the block subclass */
         $source = $block->getSource();
         if ($source === null || !$this->config->isEnabled((int)$source->getStoreId())) {
-            return [];
+            return null;
         }
         $orderId = (int)($source instanceof Order ? $source->getId() : $source->getOrderId());
         if ($orderId <= 0 || !$this->repository->hasLines($orderId)) {
-            return [];
+            return null;
         }
 
         return $this->salesLines->getLines($source);

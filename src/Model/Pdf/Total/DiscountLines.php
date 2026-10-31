@@ -70,6 +70,8 @@ class DiscountLines extends DefaultTotal
 
                     return $entries;
                 }
+                // Stored lines but none for this document: core amount, never the rule description in the label.
+                $this->setData('title_source_field', null);
             }
         } catch (Throwable $exception) {
             $this->logger->error('Discount lines: PDF totals failed, core entry kept.', [

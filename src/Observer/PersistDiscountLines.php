@@ -13,6 +13,7 @@ use PixelPerfect\DiscountLines\Api\ConfigInterface;
 use PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface;
 use PixelPerfect\DiscountLines\Api\DiscountLineRepositoryInterface;
 use PixelPerfect\DiscountLines\Api\Service\QuoteDiscountLinesInterface;
+use PixelPerfect\DiscountLines\Model\Data\DiscountLine;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -53,6 +54,9 @@ class PersistDiscountLines implements ObserverInterface
             }
             $lines = $this->quoteDiscountLines->getLines($quote);
             if ($lines === []) {
+                $lines = $this->genericLine($order);
+            }
+            if ($lines === []) {
                 return;
             }
 
@@ -61,6 +65,34 @@ class PersistDiscountLines implements ObserverInterface
         } catch (\Throwable $e) {
             $this->logger->error('Discount lines could not be stored: ' . $e->getMessage(), ['exception' => $e]);
         }
+    }
+
+    /**
+     * One plain "Discount" line for a discount no rule could be credited with, so the order never shows the core
+     * row (whose label carries the rule description).
+     *
+     * @param Order $order
+     * @return DiscountLineInterface[]
+     */
+    private function genericLine(Order $order): array
+    {
+        $amount = round(abs((float)$order->getDiscountAmount()), 2);
+        $baseAmount = round(abs((float)$order->getBaseDiscountAmount()), 2);
+        if ($amount <= 0.0 && $baseAmount <= 0.0) {
+            return [];
+        }
+
+        return [
+            new DiscountLine(
+                DiscountLineInterface::KIND_AUTOMATIC,
+                null,
+                null,
+                (string)__('Discount'),
+                $amount,
+                $baseAmount,
+                0
+            ),
+        ];
     }
 
     /**

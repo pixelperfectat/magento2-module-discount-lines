@@ -97,4 +97,45 @@ class DiscountLinesTest extends TestCase
 
         $this->assertSame('Discount:', (string)$entries[0]['label']);
     }
+
+    public function testStoredLinesWithoutDocumentShareKeepCoreAmountButHideTheDescription(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->repository->method('hasLines')->willReturn(true);
+        $this->salesLines->method('getLines')->willReturn([]);
+        $order = $this->createMock(Order::class);
+        $order->method('formatPriceTxt')->willReturnCallback(
+            static fn($value): string => sprintf('EUR %.2f', $value)
+        );
+        $order->method('getData')->willReturnMap([['discount_description', null, 'INTERNAL description']]);
+        $source = $this->createMock(Invoice::class);
+        $source->method('getOrderId')->willReturn(42);
+        $source->method('getStoreId')->willReturn(1);
+        $source->method('getOrder')->willReturn($order);
+        $source->method('getDataUsingMethod')->willReturn(-12.0);
+        $total = new DiscountLines(
+            $this->createMock(Data::class),
+            $this->createMock(Calculation::class),
+            $this->createMock(CollectionFactory::class),
+            $this->config,
+            $this->repository,
+            $this->salesLines,
+            new DocumentLineLabel(),
+            $this->createMock(LoggerInterface::class),
+            [
+                'order' => $order,
+                'source' => $source,
+                'title' => 'Discount',
+                'title_source_field' => 'discount_description',
+                'source_field' => 'discount_amount',
+                'font_size' => 7,
+            ]
+        );
+
+        $entries = $total->getTotalsForDisplay();
+
+        $this->assertCount(1, $entries);
+        $this->assertSame('Discount:', (string)$entries[0]['label']);
+        $this->assertSame('EUR -12.00', $entries[0]['amount']);
+    }
 }

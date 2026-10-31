@@ -244,6 +244,39 @@ class TotalsPluginTest extends TestCase
         $this->assertSame($core, $plugin->afterGetTotals($this->block, $core, ''));
     }
 
+    public function testStoredLinesWithoutDocumentShareRelabelTheCoreRow(): void
+    {
+        // e.g. a shipping-only refund of an order whose discount lines are all item rules
+        $this->salesLines->method('getLines')->willReturn([]);
+        $core = $this->coreTotals();
+        $core['discount']->setLabel('Discount (INTERNAL description)');
+
+        $result = $this->plugin->afterGetTotals($this->block, $core);
+
+        $this->assertSame(array_keys($this->coreTotals()), array_keys($result));
+        $this->assertSame('Discount', (string)$result['discount']->getLabel());
+        $this->assertSame(-12.0, $result['discount']->getValue());
+    }
+
+    public function testCoreRowOfOrderWithoutStoredLinesKeepsItsLabel(): void
+    {
+        $repository = $this->createMock(DiscountLineRepositoryInterface::class);
+        $repository->method('hasLines')->willReturn(false);
+        $plugin = new TotalsPlugin(
+            $this->config,
+            $repository,
+            $this->salesLines,
+            new DocumentLineLabel(),
+            $this->createMock(LoggerInterface::class)
+        );
+        $core = $this->coreTotals();
+        $core['discount']->setLabel('Discount (Legacy label)');
+
+        $result = $plugin->afterGetTotals($this->block, $core);
+
+        $this->assertSame('Discount (Legacy label)', (string)$result['discount']->getLabel());
+    }
+
     public function testExceptionKeepsCoreRows(): void
     {
         $this->salesLines->method('getLines')->willThrowException(new \RuntimeException('boom'));
