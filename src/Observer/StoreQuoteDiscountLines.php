@@ -41,6 +41,7 @@ class StoreQuoteDiscountLines implements ObserverInterface
      */
     public function execute(Observer $observer): void
     {
+        $address = null;
         try {
             /** @var Quote $quote */
             $quote = $observer->getEvent()->getData('quote');
@@ -61,6 +62,27 @@ class StoreQuoteDiscountLines implements ObserverInterface
         } catch (Throwable $exception) {
             $this->logger->error(
                 'Discount lines could not be stored on the quote address: ' . $exception->getMessage(),
+                ['exception' => $exception]
+            );
+            if ($address instanceof Address) {
+                $this->clear($address);
+            }
+        }
+    }
+
+    /**
+     * Drop the stored lines so lines of an earlier collect never outlive a failed one.
+     *
+     * @param Address $address
+     * @return void
+     */
+    private function clear(Address $address): void
+    {
+        try {
+            $this->store->store($address, []);
+        } catch (Throwable $exception) {
+            $this->logger->error(
+                'Stale discount lines could not be cleared on the quote address: ' . $exception->getMessage(),
                 ['exception' => $exception]
             );
         }

@@ -145,4 +145,24 @@ class StoreQuoteDiscountLinesTest extends TestCase
 
         $this->observer->execute($this->event($this->quote(false), $this->address(Address::ADDRESS_TYPE_SHIPPING)));
     }
+
+    public function testFailedCollectClearsStaleLines(): void
+    {
+        $address = $this->address(Address::ADDRESS_TYPE_SHIPPING);
+        $this->quoteLines->method('getLinesForAddress')->willThrowException(new \RuntimeException('boom'));
+        $this->store->expects($this->once())->method('store')->with($this->identicalTo($address), []);
+
+        $this->observer->execute($this->event($this->quote(false), $address));
+    }
+
+    public function testFailingStoreNeverThrows(): void
+    {
+        $address = $this->address(Address::ADDRESS_TYPE_SHIPPING);
+        $this->quoteLines->method('getLinesForAddress')->willReturn([]);
+        $this->store->expects($this->exactly(2))->method('store')
+            ->willThrowException(new \RuntimeException('store down'));
+        $this->logger->expects($this->exactly(2))->method('error');
+
+        $this->observer->execute($this->event($this->quote(false), $address));
+    }
 }
