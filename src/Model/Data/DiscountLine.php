@@ -6,7 +6,10 @@ namespace PixelPerfect\DiscountLines\Model\Data;
 
 use PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface;
 
-readonly class DiscountLine implements DiscountLineInterface
+/**
+ * JSON-serialisable so the cart page's checkout config (which json-encodes the total segments) carries the lines.
+ */
+readonly class DiscountLine implements DiscountLineInterface, \JsonSerializable
 {
     /**
      * @param string $kind
@@ -129,5 +132,22 @@ readonly class DiscountLine implements DiscountLineInterface
             'amount' => $this->amount,
             'base_amount' => $this->baseAmount,
         ];
+    }
+
+    /**
+     * Serialise as the contract array.
+     *
+     * @return array{
+     *     kind: string,
+     *     rule_id: int|null,
+     *     code: string|null,
+     *     label: string,
+     *     amount: float,
+     *     base_amount: float
+     * }
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }
