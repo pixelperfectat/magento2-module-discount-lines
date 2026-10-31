@@ -68,8 +68,9 @@ class PersistDiscountLines implements ObserverInterface
     }
 
     /**
-     * One plain "Discount" line for a discount no rule could be credited with, so the order never shows the core
-     * row (whose label carries the rule description).
+     * One plain "Discount" line for a discount no rule could be credited with.
+     *
+     * The order then never shows the core row, whose label carries the rule description.
      *
      * @param Order $order
      * @return DiscountLineInterface[]

@@ -26,8 +26,9 @@ interface DocumentLineLabelInterface
     public function value(DiscountLineInterface $line, bool $base = false): float;
 
     /**
-     * Get the translated text printed in place of the amount: "Gift" / "Free" for zero-amount gift and free
-     * shipping lines, null when the amount itself is printed.
+     * Get the translated text printed in place of the amount.
+     *
+     * "Gift" / "Free" for zero-amount gift and free shipping lines, null when the amount itself is printed.
      *
      * @param DiscountLineInterface $line
      * @return string|null
