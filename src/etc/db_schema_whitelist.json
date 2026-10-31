@@ -20,5 +20,10 @@
             "PP_DISCOUNT_LINE_ORDER_ID_SALES_ORDER_ENTITY_ID": true,
             "PP_DISCOUNT_LINE_ORDER_ITEM_ID_SALES_ORDER_ITEM_ITEM_ID": true
         }
+    },
+    "quote_address": {
+        "column": {
+            "pp_discount_lines": true
+        }
     }
 }

@@ -13,6 +13,8 @@
                 type="PixelPerfect\DiscountLines\Service\RuleLoader"/>
     <preference for="PixelPerfect\DiscountLines\Api\Service\QuoteDiscountLinesInterface"
                 type="PixelPerfect\DiscountLines\Service\QuoteDiscountLines"/>
+    <preference for="PixelPerfect\DiscountLines\Api\Service\QuoteLineStoreInterface"
+                type="PixelPerfect\DiscountLines\Service\QuoteLineStore"/>
     <preference for="PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface"
                 type="PixelPerfect\DiscountLines\Service\Resolver\CompositeResolver"/>
 

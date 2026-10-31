@@ -25,4 +25,7 @@
             <column name="order_id"/>
         </index>
     </table>
+    <table name="quote_address" resource="checkout">
+        <column xsi:type="text" name="pp_discount_lines" nullable="true" comment="Discount Lines"/>
+    </table>
 </schema>

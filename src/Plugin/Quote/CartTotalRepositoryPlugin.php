@@ -9,37 +9,41 @@ use Magento\Quote\Api\CartTotalRepositoryInterface;
 use Magento\Quote\Api\Data\TotalSegmentExtensionFactory;
 use Magento\Quote\Api\Data\TotalsInterface;
 use Magento\Quote\Model\Quote;
-use PixelPerfect\DiscountLines\Api\Service\QuoteDiscountLinesInterface;
+use PixelPerfect\DiscountLines\Api\ConfigInterface;
+use PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface;
+use PixelPerfect\DiscountLines\Api\Service\QuoteLineStoreInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Exposes the itemised discount lines on the `discount` total segment of the cart totals.
+ * Exposes the stored discount lines on the `discount` total segment of the cart totals.
  *
  * Covers every consumer of the cart totals: REST (`/V1/carts/.../totals`), the checkout config of the cart page and
- * the Hyva Checkout price summary. Never breaks the cart: on any failure the totals are returned unchanged.
+ * the Hyva Checkout price summary. Read-only: the lines were stored at collect time, nothing is collected or saved
+ * here. Never breaks the cart: on any failure the totals are returned unchanged.
  */
 class CartTotalRepositoryPlugin
 {
     public const SEGMENT_CODE = 'discount';
-    private const EPSILON = 0.00001;
 
     /**
      * @param CartRepositoryInterface $cartRepository
-     * @param QuoteDiscountLinesInterface $quoteLines
+     * @param ConfigInterface $config
+     * @param QuoteLineStoreInterface $store
      * @param TotalSegmentExtensionFactory $extensionFactory
      * @param LoggerInterface $logger
      */
     public function __construct(
         private readonly CartRepositoryInterface $cartRepository,
-        private readonly QuoteDiscountLinesInterface $quoteLines,
+        private readonly ConfigInterface $config,
+        private readonly QuoteLineStoreInterface $store,
         private readonly TotalSegmentExtensionFactory $extensionFactory,
         private readonly LoggerInterface $logger
     ) {
     }
 
     /**
-     * Add the discount lines to the discount segment.
+     * Add the discount lines to the discount segment and replace its title with the safe labels.
      *
      * @param CartTotalRepositoryInterface $subject
      * @param TotalsInterface $result
@@ -56,10 +60,11 @@ class CartTotalRepositoryPlugin
 
         try {
             $quote = $this->cartRepository->getActive((int)$cartId);
-            if ($quote instanceof Quote) {
-                $this->ensureRuleBreakdown($quote);
+            if (!$quote instanceof Quote || !$this->config->isEnabled((int)$quote->getStoreId())) {
+                return $result;
             }
-            $lines = $quote instanceof Quote ? $this->quoteLines->getLines($quote) : [];
+            $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
+            $lines = $this->store->load($address);
             if ($lines === []) {
                 return $result;
             }
@@ -68,6 +73,8 @@ class CartTotalRepositoryPlugin
             // @phpstan-ignore-next-line
             $extension->setDiscountLines($lines);
             $segment->setExtensionAttributes($extension);
+            // The core title carries the rule description, which must never reach the customer.
+            $segment->setTitle((string)__('Discount (%1)', $this->labels($lines)));
         } catch (Throwable $exception) {
             $this->logger->error(
                 'Discount lines could not be added to the cart totals: ' . $exception->getMessage(),
@@ -79,26 +86,20 @@ class CartTotalRepositoryPlugin
     }
 
     /**
-     * Collect the totals when the loaded quote lacks the per-rule breakdown.
+     * Join the customer-safe labels; coupons show their code.
      *
-     * The breakdown (`discounts` on the address extension attributes) only exists in the request that collected the
-     * totals; a quote freshly loaded from the database (REST totals, cart page) has the discount amount but no
-     * breakdown. Collecting is what every cart action does anyway and yields the same amounts.
-     *
-     * @param Quote $quote
-     * @return void
+     * @param DiscountLineInterface[] $lines
+     * @return string
      */
-    private function ensureRuleBreakdown(Quote $quote): void
+    private function labels(array $lines): string
     {
-        $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
-        if (abs((float)$address->getDiscountAmount()) < self::EPSILON) {
-            return;
+        $labels = [];
+        foreach ($lines as $line) {
+            $labels[] = $line->getKind() === DiscountLineInterface::KIND_COUPON && $line->getCode() !== null
+                ? $line->getCode()
+                : $line->getLabel();
         }
-        $extension = $address->getExtensionAttributes();
-        // The extension interface is generated at runtime and unknown to static analysis.
-        // @phpstan-ignore-next-line
-        if ($extension === null || !$extension->getDiscounts()) {
-            $quote->collectTotals();
-        }
+
+        return implode(', ', $labels);
     }
 }

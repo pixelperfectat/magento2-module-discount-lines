@@ -15,7 +15,8 @@ use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use PixelPerfect\DiscountLines\Api\Service\QuoteDiscountLinesInterface;
+use PixelPerfect\DiscountLines\Api\ConfigInterface;
+use PixelPerfect\DiscountLines\Api\Service\QuoteLineStoreInterface;
 use PixelPerfect\DiscountLines\Model\Data\DiscountLine;
 use PixelPerfect\DiscountLines\Plugin\Quote\CartTotalRepositoryPlugin;
 use Psr\Log\LoggerInterface;
@@ -32,34 +33,55 @@ if (!class_exists(TotalSegmentExtensionFactory::class)) {
 
 class CartTotalRepositoryPluginTest extends TestCase
 {
-    private CartRepositoryInterface&MockObject $cartRepository;
-    private QuoteDiscountLinesInterface&MockObject $quoteLines;
+    private const RULE_DESCRIPTION = 'INTERNAL description - must never show to customers';
+
+    private ConfigInterface&MockObject $config;
+    private QuoteLineStoreInterface&MockObject $store;
     private LoggerInterface&MockObject $logger;
+    private Quote&MockObject $quote;
     private CartTotalRepositoryPlugin $plugin;
 
     protected function setUp(): void
     {
-        $this->cartRepository = $this->createMock(CartRepositoryInterface::class);
-        $this->cartRepository->method('getActive')->willReturn($this->quoteWithAddress(0.0, null));
-        $this->quoteLines = $this->createMock(QuoteDiscountLinesInterface::class);
+        $this->config = $this->createMock(ConfigInterface::class);
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->store = $this->createMock(QuoteLineStoreInterface::class);
         $this->logger = $this->createMock(LoggerInterface::class);
+        $address = $this->createMock(Address::class);
+        $this->quote = $this->getMockBuilder(Quote::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['isVirtual', 'getShippingAddress', 'getBillingAddress', 'getStoreId', 'collectTotals'])
+            ->getMock();
+        $this->quote->method('isVirtual')->willReturn(false);
+        $this->quote->method('getShippingAddress')->willReturn($address);
+        $this->quote->method('getBillingAddress')->willReturn($address);
+        $this->quote->method('getStoreId')->willReturn(1);
+        $repository = $this->createMock(CartRepositoryInterface::class);
+        $repository->method('getActive')->willReturn($this->quote);
         $this->plugin = new CartTotalRepositoryPlugin(
-            $this->cartRepository,
-            $this->quoteLines,
+            $repository,
+            $this->config,
+            $this->store,
             new TotalSegmentExtensionFactory(),
             $this->logger
         );
     }
 
-    /**
-     * @return TotalSegmentInterface&MockObject
-     */
-    private function segment(float $value): TotalSegmentInterface
+    private function segment(float $value): TotalSegmentInterface&MockObject
     {
         $holder = new \stdClass();
         $holder->extension = null;
+        $holder->title = 'Discount (' . self::RULE_DESCRIPTION . ')';
         $segment = $this->createMock(TotalSegmentInterface::class);
         $segment->method('getValue')->willReturn($value);
+        $segment->method('getTitle')->willReturnCallback(static fn() => $holder->title);
+        $segment->method('setTitle')->willReturnCallback(
+            static function ($title) use ($holder, $segment) {
+                $holder->title = $title;
+
+                return $segment;
+            }
+        );
         $segment->method('getExtensionAttributes')->willReturnCallback(static fn() => $holder->extension);
         $segment->method('setExtensionAttributes')->willReturnCallback(
             static function ($extension) use ($holder, $segment) {
@@ -88,15 +110,23 @@ class CartTotalRepositoryPluginTest extends TestCase
         return $this->plugin->afterGet($this->createMock(CartTotalRepositoryInterface::class), $totals, 7);
     }
 
-    public function testAddsLinesToDiscountSegmentOnly(): void
+    /**
+     * @return DiscountLine[]
+     */
+    private function twoLines(): array
     {
-        $discount = $this->segment(-5.56);
-        $subtotal = $this->segment(100.0);
-        $lines = [
+        return [
             new DiscountLine('coupon', 1, 'CODE', 'CODE', 3.33, 3.33),
             new DiscountLine('automatic', 2, null, 'Sale', 2.23, 2.23),
         ];
-        $this->quoteLines->method('getLines')->willReturn($lines);
+    }
+
+    public function testStoredLinesAreExposedOnDiscountSegmentOnly(): void
+    {
+        $discount = $this->segment(-5.56);
+        $subtotal = $this->segment(100.0);
+        $lines = $this->twoLines();
+        $this->store->method('load')->willReturn($lines);
 
         $this->process($this->totals(['subtotal' => $subtotal, 'discount' => $discount]));
 
@@ -109,10 +139,7 @@ class CartTotalRepositoryPluginTest extends TestCase
     public function testLinesSumToSourceDiscount(): void
     {
         $discount = $this->segment(-5.56);
-        $this->quoteLines->method('getLines')->willReturn([
-            new DiscountLine('coupon', 1, 'CODE', 'CODE', 3.33, 3.33),
-            new DiscountLine('automatic', 2, null, 'Sale', 2.23, 2.23),
-        ]);
+        $this->store->method('load')->willReturn($this->twoLines());
 
         $this->process($this->totals(['discount' => $discount]));
 
@@ -123,102 +150,67 @@ class CartTotalRepositoryPluginTest extends TestCase
         $this->assertEqualsWithDelta(abs($discount->getValue()), $sum, 0.00001);
     }
 
-    /**
-     * @return Quote&MockObject
-     */
-    private function quoteWithAddress(float $discount, ?object $extension): Quote
+    public function testSegmentTitleNeverContainsRuleDescription(): void
     {
-        $address = $this->getMockBuilder(Address::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['getExtensionAttributes'])
-            ->addMethods(['getDiscountAmount'])
-            ->getMock();
-        $address->method('getDiscountAmount')->willReturn($discount);
-        $address->method('getExtensionAttributes')->willReturn($extension);
-        $quote = $this->getMockBuilder(Quote::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['isVirtual', 'getShippingAddress', 'getBillingAddress', 'collectTotals'])
-            ->getMock();
-        $quote->method('isVirtual')->willReturn(false);
-        $quote->method('getShippingAddress')->willReturn($address);
-        $quote->method('getBillingAddress')->willReturn($address);
+        $discount = $this->segment(-5.56);
+        $this->store->method('load')->willReturn($this->twoLines());
 
-        return $quote;
+        $this->process($this->totals(['discount' => $discount]));
+
+        $this->assertSame('Discount (CODE, Sale)', $discount->getTitle());
+        $this->assertStringNotContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
     }
 
-    private function pluginFor(Quote $quote): CartTotalRepositoryPlugin
+    public function testNoCollectTotalsOnRead(): void
     {
-        $repository = $this->createMock(CartRepositoryInterface::class);
-        $repository->method('getActive')->willReturn($quote);
+        $this->quote->expects($this->never())->method('collectTotals');
+        $this->store->method('load')->willReturn($this->twoLines());
 
-        return new CartTotalRepositoryPlugin(
+        $this->process($this->totals(['discount' => $this->segment(-5.56)]));
+    }
+
+    public function testDisabledStoreDoesNothing(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('isEnabled')->willReturn(false);
+        $repository = $this->createMock(CartRepositoryInterface::class);
+        $repository->method('getActive')->willReturn($this->quote);
+        $plugin = new CartTotalRepositoryPlugin(
             $repository,
-            $this->quoteLines,
+            $config,
+            $this->store,
             new TotalSegmentExtensionFactory(),
             $this->logger
         );
-    }
+        $this->store->expects($this->never())->method('load');
+        $this->quote->expects($this->never())->method('collectTotals');
+        $discount = $this->segment(-5.56);
 
-    public function testRecollectsWhenTheLoadedQuoteHasNoRuleBreakdown(): void
-    {
-        $quote = $this->quoteWithAddress(-5.0, null);
-        $quote->expects($this->once())->method('collectTotals');
-        $this->quoteLines->method('getLines')->willReturn([]);
-
-        $this->pluginFor($quote)->afterGet(
+        $plugin->afterGet(
             $this->createMock(CartTotalRepositoryInterface::class),
-            $this->totals(['discount' => $this->segment(-5.0)]),
+            $this->totals(['discount' => $discount]),
             7
         );
+
+        $this->assertNull($discount->getExtensionAttributes());
+        $this->assertStringContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
     }
 
-    public function testDoesNotRecollectWhenTheQuoteAlreadyHasTheBreakdown(): void
+    public function testMissingStoredLinesLeaveTheCoreRow(): void
     {
-        $extension = new class {
-            /** @return array<int, object> */
-            public function getDiscounts(): array
-            {
-                return [new \stdClass()];
-            }
-        };
-        $quote = $this->quoteWithAddress(-5.0, $extension);
-        $quote->expects($this->never())->method('collectTotals');
-        $this->quoteLines->method('getLines')->willReturn([]);
-
-        $this->pluginFor($quote)->afterGet(
-            $this->createMock(CartTotalRepositoryInterface::class),
-            $this->totals(['discount' => $this->segment(-5.0)]),
-            7
-        );
-    }
-
-    public function testDoesNotRecollectWithoutDiscount(): void
-    {
-        $quote = $this->quoteWithAddress(0.0, null);
-        $quote->expects($this->never())->method('collectTotals');
-        $this->quoteLines->method('getLines')->willReturn([]);
-
-        $this->pluginFor($quote)->afterGet(
-            $this->createMock(CartTotalRepositoryInterface::class),
-            $this->totals(['discount' => $this->segment(0.0)]),
-            7
-        );
-    }
-
-    public function testNoChangeWhenThereAreNoLines(): void
-    {
-        $discount = $this->segment(0.0);
-        $this->quoteLines->method('getLines')->willReturn([]);
+        $discount = $this->segment(-5.56);
+        $this->store->method('load')->willReturn([]);
 
         $this->process($this->totals(['discount' => $discount]));
 
         $this->assertNull($discount->getExtensionAttributes());
+        $this->assertStringContainsString(self::RULE_DESCRIPTION, $discount->getTitle());
     }
 
     public function testNoChangeWithoutDiscountSegment(): void
     {
         $subtotal = $this->segment(100.0);
-        $this->quoteLines->expects($this->never())->method('getLines');
+        $this->store->expects($this->never())->method('load');
 
         $this->process($this->totals(['subtotal' => $subtotal]));
 
@@ -227,22 +219,22 @@ class CartTotalRepositoryPluginTest extends TestCase
 
     public function testKeepsExistingExtensionAttributes(): void
     {
-        $discount = $this->segment(-2.0);
+        $discount = $this->segment(-5.56);
         $existing = new TotalSegmentExtension();
         $discount->setExtensionAttributes($existing);
-        $this->quoteLines->method('getLines')->willReturn([new DiscountLine('coupon', 1, 'C', 'C', 2.0, 2.0)]);
+        $this->store->method('load')->willReturn($this->twoLines());
 
         $this->process($this->totals(['discount' => $discount]));
 
         $this->assertSame($existing, $discount->getExtensionAttributes());
-        $this->assertCount(1, $existing->getDiscountLines());
+        $this->assertCount(2, $existing->getDiscountLines());
     }
 
     public function testFailureIsLoggedAndTotalsAreReturnedUntouched(): void
     {
         $discount = $this->segment(-2.0);
         $totals = $this->totals(['discount' => $discount]);
-        $this->quoteLines->method('getLines')->willThrowException(new \RuntimeException('boom'));
+        $this->store->method('load')->willThrowException(new \RuntimeException('boom'));
         $this->logger->expects($this->once())->method('error');
 
         $this->assertSame($totals, $this->process($totals));

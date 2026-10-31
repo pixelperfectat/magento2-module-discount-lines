@@ -4,4 +4,8 @@
     <event name="sales_model_service_quote_submit_success">
         <observer name="pp_discount_lines_persist" instance="PixelPerfect\DiscountLines\Observer\PersistDiscountLines"/>
     </event>
+    <event name="sales_quote_address_collect_totals_after">
+        <observer name="pp_discount_lines_store"
+                  instance="PixelPerfect\DiscountLines\Observer\StoreQuoteDiscountLines"/>
+    </event>
 </config>
