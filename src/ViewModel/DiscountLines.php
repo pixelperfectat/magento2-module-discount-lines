@@ -97,6 +97,28 @@ class DiscountLines implements ArgumentInterface
     }
 
     /**
+     * Sum of the line amounts, rounded to two decimals ("You save").
+     *
+     * @param array<int, array{amount: float}> $lines lines as returned by getLinesFromSegment()
+     * @return float
+     */
+    public function getSavedTotal(array $lines): float
+    {
+        return round(array_sum(array_column($lines, 'amount')), 2);
+    }
+
+    /**
+     * Whether any of the lines is a removable coupon.
+     *
+     * @param array<int, array{removable: bool}> $lines lines as returned by getLinesFromSegment()
+     * @return bool
+     */
+    public function hasCoupon(array $lines): bool
+    {
+        return in_array(true, array_column($lines, 'removable'), true);
+    }
+
+    /**
      * Get the URL of the icon for a line kind (tag for unknown kinds).
      *
      * @param string $kind

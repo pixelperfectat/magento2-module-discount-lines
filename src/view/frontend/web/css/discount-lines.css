@@ -9,6 +9,7 @@
     --pp-dl-auto-bg: #f5f5f5;
     --pp-dl-auto-ink: #546e7a;
     --pp-dl-save: #2e7d5b;
+    --pp-dl-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .pp-dl {
@@ -75,8 +76,23 @@
     white-space: nowrap;
 }
 
+.pp-dl__code {
+    font-family: var(--pp-dl-mono);
+}
+
+.pp-dl__label-plain {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
 .pp-dl__remove {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
     margin-left: 0.25rem;
     padding: 0 0.25em;
     border: 0;
@@ -90,6 +106,24 @@
 
 .pp-dl__remove:hover,
 .pp-dl__remove:focus-visible {
+    opacity: 1;
+}
+
+.pp-dl__remove:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
+}
+
+.pp-dl__remove[disabled] {
+    cursor: progress;
+    opacity: 0.3;
+}
+
+.pp-dl__remove--link {
+    min-height: 24px;
+    padding: 0.25rem 0;
+    font-size: 0.875em;
+    text-decoration: underline;
     opacity: 1;
 }
 
@@ -136,11 +170,11 @@
     padding: 0;
     background: transparent;
     border-radius: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--pp-dl-mono);
     font-size: 0.8125em;
 }
 
 .pp-dl--d .pp-dl__amount {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--pp-dl-mono);
     font-size: 0.8125em;
 }

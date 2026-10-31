@@ -112,4 +112,19 @@ class DiscountLinesTest extends TestCase
 
         $this->assertStringEndsWith('images/tag.svg', $this->viewModel->getIconUrl('something_new'));
     }
+
+    public function testSavedTotalIsRoundedSum(): void
+    {
+        $lines = [['amount' => 1.005], ['amount' => 2.1], ['amount' => 0.0]];
+
+        $this->assertSame(3.11, $this->viewModel->getSavedTotal($lines));
+        $this->assertSame(0.0, $this->viewModel->getSavedTotal([]));
+    }
+
+    public function testHasCouponDetectsRemovableLine(): void
+    {
+        $this->assertTrue($this->viewModel->hasCoupon([['removable' => false], ['removable' => true]]));
+        $this->assertFalse($this->viewModel->hasCoupon([['removable' => false]]));
+        $this->assertFalse($this->viewModel->hasCoupon([]));
+    }
 }
