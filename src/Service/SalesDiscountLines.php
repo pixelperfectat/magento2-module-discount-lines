@@ -110,13 +110,18 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
             }
         }
 
+        // Zero lines (gift, free shipping) stay on orders and invoices, but not on credit memos.
+        $keepZero = !$document instanceof Creditmemo;
         $result = array_values(array_filter($result, static fn(DiscountLineInterface $line): bool => (
             $line->getAmount() > 0.0
             || $line->getBaseAmount() > 0.0
-            || in_array(
-                $line->getKind(),
-                [DiscountLineInterface::KIND_GIFT, DiscountLineInterface::KIND_FREE_SHIPPING],
-                true
+            || (
+                $keepZero
+                && in_array(
+                    $line->getKind(),
+                    [DiscountLineInterface::KIND_GIFT, DiscountLineInterface::KIND_FREE_SHIPPING],
+                    true
+                )
             )
         )));
 

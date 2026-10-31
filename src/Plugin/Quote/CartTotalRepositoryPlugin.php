@@ -122,7 +122,7 @@ class CartTotalRepositoryPlugin
      */
     private function addMissingSegment(TotalsInterface $totals, array $lines, int $storeId): void
     {
-        if ($lines === []) {
+        if ($lines === [] || !$this->allZero($lines)) {
             return;
         }
         $segment = $this->segmentFactory->create();
@@ -137,6 +137,23 @@ class CartTotalRepositoryPlugin
             + [self::SEGMENT_CODE => $segment]
             + array_slice($existing, $position, null, true)
         );
+    }
+
+    /**
+     * Whether every line is a zero line (gift, free shipping); a money line means core output is left alone.
+     *
+     * @param DiscountLineInterface[] $lines
+     * @return bool
+     */
+    private function allZero(array $lines): bool
+    {
+        foreach ($lines as $line) {
+            if (abs($line->getAmount()) > 0.00001 || abs($line->getBaseAmount()) > 0.00001) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

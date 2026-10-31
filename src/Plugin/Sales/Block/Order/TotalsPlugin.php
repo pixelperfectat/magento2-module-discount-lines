@@ -62,7 +62,7 @@ class TotalsPlugin
                 return $result;
             }
             if (!$hasRow) {
-                return $this->insertRows($subject, $result, $this->buildRows($lines));
+                return $this->insertRows($subject, $result, $lines);
             }
 
             return $this->rebuild($result, $this->buildRows($lines));
@@ -91,11 +91,17 @@ class TotalsPlugin
      *
      * @param Totals $block
      * @param array<int|string, DataObject> $totals
-     * @param array<string, DataObject> $rows
+     * @param DiscountLineInterface[] $lines
      * @return array<int|string, DataObject>
      */
-    private function insertRows(Totals $block, array $totals, array $rows): array
+    private function insertRows(Totals $block, array $totals, array $lines): array
     {
+        foreach ($lines as $line) {
+            if (abs($line->getAmount()) > 0.00001 || abs($line->getBaseAmount()) > 0.00001) {
+                return $totals;
+            }
+        }
+        $rows = $this->buildRows($lines);
         /** @var AbstractModel|null $source Order, invoice or credit memo depending on the block subclass */
         $source = $block->getSource();
         if ($source === null || abs((float)$source->getData('discount_amount')) > 0.00001) {

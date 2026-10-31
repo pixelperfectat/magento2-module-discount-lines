@@ -290,6 +290,17 @@ class SalesDiscountLinesTest extends TestCase
         $this->assertSame([], $this->service->getLines($this->creditmemo($order, [], $data)));
     }
 
+    public function testZeroGiftLineStaysOnInvoicesButNotOnCreditMemos(): void
+    {
+        $this->repository->method('getOrderLines')->willReturn([$this->line('gift', 9, 0.0, 'FREEBIE')]);
+        $this->repository->method('getItemAmounts')->willReturn([]);
+        $order = $this->order(['discount_amount' => 0.0, 'base_discount_amount' => 0.0, 'shipping_amount' => 0.0]);
+        $data = ['order_id' => 1, 'discount_amount' => 0.0, 'base_discount_amount' => 0.0, 'shipping_amount' => 0.0];
+
+        $this->assertCount(1, $this->service->getLines($this->invoice($order, [], $data)));
+        $this->assertSame([], $this->service->getLines($this->creditmemo($order, [], $data)));
+    }
+
     public function testLinesAreLoadedOncePerSource(): void
     {
         $order = $this->createMock(Order::class);

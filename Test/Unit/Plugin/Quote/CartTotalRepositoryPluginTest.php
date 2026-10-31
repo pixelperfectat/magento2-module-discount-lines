@@ -282,6 +282,20 @@ class CartTotalRepositoryPluginTest extends TestCase
         $this->assertSame(['subtotal', 'discount', 'shipping'], array_keys($totals->getTotalSegments()));
     }
 
+    public function testNoInsertWhenAMoneyLineExistsWithZeroDiscount(): void
+    {
+        $this->store->method('load')->willReturn([
+            new DiscountLine('gift', 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0),
+            new DiscountLine('coupon', 1, 'CODE', 'CODE', 2.0, 2.0),
+        ]);
+        $totals = $this->totals(['subtotal' => $this->segment(100.0)]);
+
+        $this->process($totals);
+
+        $this->assertSame(['subtotal'], array_keys($totals->getTotalSegments()));
+        $this->assertSame([], $this->created);
+    }
+
     public function testNoSegmentAddedWithoutStoredLines(): void
     {
         $this->store->method('load')->willReturn([]);

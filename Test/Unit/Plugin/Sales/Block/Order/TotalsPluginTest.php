@@ -217,6 +217,17 @@ class TotalsPluginTest extends TestCase
         $this->assertSame($core, $this->plugin->afterGetTotals($block, $core, ''));
     }
 
+    public function testNoInsertWhenAMoneyLineExistsWithZeroDiscount(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0, 0),
+            new DiscountLine(DiscountLineInterface::KIND_COUPON, 1, 'CODE', 'CODE', 2.0, 2.0, 1),
+        ]);
+        $core = $this->totalsWithoutDiscount();
+
+        $this->assertSame($core, $this->plugin->afterGetTotals($this->block, $core, ''));
+    }
+
     public function testNoRowInsertedWithoutStoredLines(): void
     {
         $repository = $this->createMock(DiscountLineRepositoryInterface::class);
