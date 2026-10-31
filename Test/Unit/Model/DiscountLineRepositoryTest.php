@@ -14,26 +14,19 @@ use PixelPerfect\DiscountLines\Model\ResourceModel\DiscountLineRecord as RecordR
 use PixelPerfect\DiscountLines\Model\ResourceModel\DiscountLineRecord\Collection;
 use PixelPerfect\DiscountLines\Model\ResourceModel\DiscountLineRecord\CollectionFactory;
 
+// Factories are generated at runtime and absent from a plain unit-test autoloader.
+if (!class_exists(CollectionFactory::class)) {
+    require_once __DIR__ . '/../../Stub/DiscountLineRecordCollectionFactory.php';
+}
+if (!class_exists(DiscountLineInterfaceFactory::class)) {
+    require_once __DIR__ . '/../../Stub/DiscountLineInterfaceFactory.php';
+}
+
 class DiscountLineRepositoryTest extends TestCase
 {
     private RecordResource&MockObject $resource;
     private CollectionFactory&MockObject $collectionFactory;
     private DiscountLineRepository $repository;
-
-    public static function setUpBeforeClass(): void
-    {
-        // Factories are generated at runtime and absent from a plain unit-test autoloader.
-        if (!class_exists(CollectionFactory::class)) {
-            // phpcs:ignore Squiz.PHP.Eval
-            eval('namespace PixelPerfect\\DiscountLines\\Model\\ResourceModel\\DiscountLineRecord;'
-                . 'class CollectionFactory { public function create(array $data = []) { return null; } }');
-        }
-        if (!class_exists(DiscountLineInterfaceFactory::class)) {
-            // phpcs:ignore Squiz.PHP.Eval
-            eval('namespace PixelPerfect\\DiscountLines\\Api\\Data;'
-                . 'class DiscountLineInterfaceFactory { public function create(array $data = []) { return null; } }');
-        }
-    }
 
     protected function setUp(): void
     {
