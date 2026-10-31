@@ -43,12 +43,15 @@ class TotalsPlugin
      * Swap the discount row for one row per line.
      *
      * @param Totals $subject
-     * @param array<int|string, DataObject> $result
+     * @param array<int|string, DataObject>|null $result Null while the block is not initialised
      * @param array<int|string, mixed>|string|null $area
-     * @return array<int|string, DataObject>
+     * @return array<int|string, DataObject>|null
      */
-    public function afterGetTotals(Totals $subject, array $result, $area = null): array
+    public function afterGetTotals(Totals $subject, $result, $area = null)
     {
+        if (!is_array($result)) {
+            return $result;
+        }
         try {
             $lines = $this->loadLines($subject);
             if ($lines === []) {

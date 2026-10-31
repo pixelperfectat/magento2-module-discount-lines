@@ -135,4 +135,9 @@ class TotalsPluginTest extends TestCase
 
         $this->assertSame($core, $this->plugin->afterGetTotals($this->block, $core));
     }
+
+    public function testUninitialisedBlockResultIsPassedThrough(): void
+    {
+        $this->assertNull($this->plugin->afterGetTotals($this->block, null));
+    }
 }
