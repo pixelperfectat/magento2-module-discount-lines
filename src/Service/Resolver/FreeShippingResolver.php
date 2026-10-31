@@ -6,6 +6,7 @@ namespace PixelPerfect\DiscountLines\Service\Resolver;
 
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
+use Magento\SalesRule\Api\Data\DiscountAppliedToInterface;
 use PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface;
 use PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface;
 use PixelPerfect\DiscountLines\Api\Service\LabelResolverInterface;
@@ -41,6 +42,10 @@ class FreeShippingResolver implements DiscountLineResolverInterface
         $couponCode = $quote->getCouponCode() !== null ? (string)$quote->getCouponCode() : null;
         $ruleIds = array_filter(array_map('intval', explode(',', (string)$address->getAppliedRuleIds())));
 
+        $contained = $this->shippingPartInRuleLines($address);
+        $amount = max(0.0, round($amount - $contained[0], 2));
+        $baseAmount = max(0.0, round($baseAmount - $contained[1], 2));
+
         $lines = [];
         foreach (array_unique($ruleIds) as $ruleId) {
             $rule = $this->ruleLoader->load($ruleId);
@@ -66,5 +71,31 @@ class FreeShippingResolver implements DiscountLineResolverInterface
         }
 
         return $lines;
+    }
+
+    /**
+     * Shipping discount that core already reports inside the per-rule `discounts` data (apply-to-shipping rules).
+     *
+     * @param Address $address
+     * @return array{0: float, 1: float} amount, base amount
+     */
+    private function shippingPartInRuleLines(Address $address): array
+    {
+        $extension = $address->getExtensionAttributes();
+        // The extension interface is generated at runtime and unknown to static analysis.
+        // @phpstan-ignore-next-line
+        $discounts = $extension !== null ? $extension->getDiscounts() : null;
+        $amount = 0.0;
+        $baseAmount = 0.0;
+        foreach ((array)$discounts as $discount) {
+            $data = $discount->getDiscountData();
+            $appliedTo = $data instanceof DiscountAppliedToInterface ? $data->getAppliedTo() : null;
+            if ($appliedTo === DiscountAppliedToInterface::APPLIED_TO_SHIPPING) {
+                $amount += abs((float)$data->getAmount());
+                $baseAmount += abs((float)$data->getBaseAmount());
+            }
+        }
+
+        return [$amount, $baseAmount];
     }
 }

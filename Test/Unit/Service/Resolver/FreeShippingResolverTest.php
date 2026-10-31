@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace PixelPerfect\DiscountLines\Test\Unit\Service\Resolver;
 
+use Magento\Framework\Api\ExtensionAttributesInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
+use Magento\SalesRule\Api\Data\DiscountAppliedToInterface;
+use Magento\SalesRule\Api\Data\RuleDiscountInterface;
+use Magento\SalesRule\Model\Data\DiscountData;
 use Magento\SalesRule\Model\Rule;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -27,8 +31,19 @@ class FreeShippingResolverTest extends TestCase
         $this->resolver = new FreeShippingResolver($this->ruleLoader, $this->labelResolver);
     }
 
-    private function address(int $freeShipping, string $ruleIds, float $shippingDiscount): Address
-    {
+    /**
+     * @param RuleDiscountInterface[] $discounts
+     */
+    private function address(
+        int $freeShipping,
+        string $ruleIds,
+        float $shippingDiscount,
+        array $discounts = []
+    ): Address {
+        $extension = $this->getMockBuilder(ExtensionAttributesInterface::class)
+            ->addMethods(['getDiscounts'])
+            ->getMockForAbstractClass();
+        $extension->method('getDiscounts')->willReturn($discounts);
         $address = $this->getMockBuilder(Address::class)
             ->disableOriginalConstructor()
             ->addMethods([
@@ -37,7 +52,9 @@ class FreeShippingResolverTest extends TestCase
                 'getShippingDiscountAmount',
                 'getBaseShippingDiscountAmount',
             ])
+            ->onlyMethods(['getExtensionAttributes'])
             ->getMock();
+        $address->method('getExtensionAttributes')->willReturn($extension);
         $address->method('getFreeShipping')->willReturn($freeShipping);
         $address->method('getAppliedRuleIds')->willReturn($ruleIds);
         $address->method('getShippingDiscountAmount')->willReturn($shippingDiscount);
@@ -103,5 +120,24 @@ class FreeShippingResolverTest extends TestCase
         $this->ruleLoader->expects($this->never())->method('load');
 
         $this->assertSame([], $this->resolver->resolve($this->address(0, '9', 0.0), $this->quote()));
+    }
+
+    public function testShippingPartAlreadyInRuleDataIsNotCountedAgain(): void
+    {
+        $this->ruleLoader->method('load')->willReturn($this->rule(9, 1));
+        $this->labelResolver->method('resolve')
+            ->willReturn(['kind' => 'coupon', 'code' => 'X', 'label' => 'X']);
+        $data = $this->createMock(DiscountData::class);
+        $data->method('getAmount')->willReturn(-4.9);
+        $data->method('getBaseAmount')->willReturn(-4.9);
+        $data->method('getAppliedTo')->willReturn(DiscountAppliedToInterface::APPLIED_TO_SHIPPING);
+        $entry = $this->createMock(RuleDiscountInterface::class);
+        $entry->method('getDiscountData')->willReturn($data);
+
+        $lines = $this->resolver->resolve($this->address(1, '9', -4.9, [$entry]), $this->quote());
+
+        $this->assertCount(1, $lines);
+        $this->assertSame(0.0, $lines[0]->getAmount());
+        $this->assertSame(0.0, $lines[0]->getBaseAmount());
     }
 }

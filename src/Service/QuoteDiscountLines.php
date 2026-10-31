@@ -9,9 +9,12 @@ use PixelPerfect\DiscountLines\Api\ConfigInterface;
 use PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface;
 use PixelPerfect\DiscountLines\Api\Service\DiscountLineResolverInterface;
 use PixelPerfect\DiscountLines\Api\Service\QuoteDiscountLinesInterface;
+use PixelPerfect\DiscountLines\Model\Data\DiscountLine;
 
 class QuoteDiscountLines implements QuoteDiscountLinesInterface
 {
+    private const ROUNDING_STEP = 0.01;
+
     /**
      * @param ConfigInterface $config
      * @param DiscountLineResolverInterface $resolver
@@ -52,7 +55,10 @@ class QuoteDiscountLines implements QuoteDiscountLinesInterface
     }
 
     /**
-     * Make the item-discount lines add up to the address discount to the cent; the largest line absorbs rounding.
+     * Make ALL lines add up to the address discount to the cent.
+     *
+     * A rounding difference (at most 0.01 per line) goes to the largest line; a bigger positive remainder that no
+     * rule accounts for becomes its own generic line instead of inflating a rule's amount.
      *
      * @param DiscountLineInterface[] $lines
      * @param float $total
@@ -61,29 +67,37 @@ class QuoteDiscountLines implements QuoteDiscountLinesInterface
      */
     private function reconcile(array $lines, float $total, float $baseTotal): array
     {
-        $largest = null;
+        $largest = 0;
         $sum = 0.0;
         $baseSum = 0.0;
         foreach ($lines as $position => $line) {
-            if ($line->getKind() === DiscountLineInterface::KIND_FREE_SHIPPING) {
-                continue;
-            }
             $sum += $line->getAmount();
             $baseSum += $line->getBaseAmount();
-            if ($largest === null || $line->getAmount() > $lines[$largest]->getAmount()) {
+            if ($line->getAmount() > $lines[$largest]->getAmount()) {
                 $largest = $position;
             }
-        }
-        if ($largest === null) {
-            return $lines;
         }
 
         $diff = round($total - $sum, 2);
         $baseDiff = round($baseTotal - $baseSum, 2);
-        if ($diff !== 0.0 || $baseDiff !== 0.0) {
+        if ($diff === 0.0 && $baseDiff === 0.0) {
+            return $lines;
+        }
+
+        $cap = self::ROUNDING_STEP * count($lines) + 1e-9;
+        if (abs($diff) <= $cap && abs($baseDiff) <= $cap) {
             $lines[$largest] = $lines[$largest]->withAmounts(
                 round($lines[$largest]->getAmount() + $diff, 2),
                 round($lines[$largest]->getBaseAmount() + $baseDiff, 2)
+            );
+        } elseif ($diff > 0.0 && $baseDiff >= 0.0) {
+            $lines[] = new DiscountLine(
+                DiscountLineInterface::KIND_AUTOMATIC,
+                null,
+                null,
+                (string)__('Discount'),
+                $diff,
+                $baseDiff
             );
         }
 

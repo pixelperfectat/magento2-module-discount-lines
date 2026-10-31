@@ -92,4 +92,67 @@ class QuoteDiscountLinesTest extends TestCase
 
         $this->assertSame([], $this->service->getLines($this->quote(0.0)));
     }
+
+    public function testLinesSumToAddressDiscountIncludingShippingDiscount(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        // apply_to_shipping rule: its discount data already holds the shipping part (6.00 items + 2.50 shipping)
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('coupon', 1, 'X', 'X', 8.5, 8.5),
+            new DiscountLine('free_shipping', 1, 'X', 'X', 0.0, 0.0),
+        ]);
+
+        $lines = $this->service->getLines($this->quote(-8.5));
+
+        $this->assertCount(2, $lines);
+        $this->assertSame(8.5, round(array_sum(array_map(fn ($l) => $l->getAmount(), $lines)), 2));
+    }
+
+    public function testFreeShippingLineDoesNotDoubleCount(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('coupon', 1, 'X', 'X', 5.0, 5.0),
+            new DiscountLine('free_shipping', 9, null, 'Free shipping', 2.0, 2.0),
+        ]);
+
+        $lines = $this->service->getLines($this->quote(-7.0));
+
+        $this->assertSame([5.0, 2.0], array_map(fn ($l) => $l->getAmount(), $lines));
+    }
+
+    public function testUnattributedRemainderBecomesGenericLine(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        // second rule failed to load: only 3.00 of 5.00 is attributed
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('coupon', 1, 'X', 'X', 3.0, 3.0),
+        ]);
+
+        $lines = $this->service->getLines($this->quote(-5.0));
+
+        $this->assertCount(2, $lines);
+        $this->assertSame(3.0, $lines[0]->getAmount());
+        $this->assertSame(
+            ['kind' => 'automatic', 'rule_id' => null, 'code' => null, 'label' => 'Discount',
+                'amount' => 2.0, 'base_amount' => 2.0],
+            $lines[1]->toArray()
+        );
+        $this->assertSame(1, $lines[1]->getSortOrder());
+    }
+
+    public function testRoundingCorrectionWithinCapGoesToLargestLine(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('automatic', 2, null, 'A', 1.0, 1.0),
+            new DiscountLine('coupon', 1, 'X', 'X', 4.0, 4.0),
+        ]);
+
+        $lines = $this->service->getLines($this->quote(-5.02));
+
+        $this->assertCount(2, $lines);
+        $this->assertSame(1.0, $lines[0]->getAmount());
+        $this->assertSame(4.02, $lines[1]->getAmount());
+    }
 }

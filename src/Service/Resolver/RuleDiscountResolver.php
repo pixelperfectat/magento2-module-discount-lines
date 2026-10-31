@@ -42,15 +42,22 @@ class RuleDiscountResolver implements DiscountLineResolverInterface
             return [];
         }
 
-        $lines = [];
+        // Core adds a separate entry for the shipping part of an apply-to-shipping rule: merge per rule.
+        $perRule = [];
         foreach ($discounts as $discount) {
             $data = $discount->getDiscountData();
-            $amount = abs((float)$data->getAmount());
-            $baseAmount = abs((float)$data->getBaseAmount());
+            $ruleId = (int)$discount->getRuleID();
+            $perRule[$ruleId] ??= [0.0, 0.0];
+            $perRule[$ruleId][0] += abs((float)$data->getAmount());
+            $perRule[$ruleId][1] += abs((float)$data->getBaseAmount());
+        }
+
+        $lines = [];
+        foreach ($perRule as $ruleId => [$amount, $baseAmount]) {
             if ($amount <= 0.0 && $baseAmount <= 0.0) {
                 continue;
             }
-            $rule = $this->ruleLoader->load((int)$discount->getRuleID());
+            $rule = $this->ruleLoader->load($ruleId);
             if ($rule === null) {
                 continue;
             }
@@ -61,11 +68,11 @@ class RuleDiscountResolver implements DiscountLineResolverInterface
             );
             $lines[] = new DiscountLine(
                 $resolved['kind'],
-                (int)$rule->getId(),
+                $ruleId,
                 $resolved['code'],
                 $resolved['label'],
-                $amount,
-                $baseAmount,
+                round($amount, 2),
+                round($baseAmount, 2),
                 count($lines)
             );
         }
