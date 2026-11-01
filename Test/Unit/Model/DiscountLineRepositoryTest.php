@@ -147,4 +147,44 @@ class DiscountLineRepositoryTest extends TestCase
 
         $this->assertSame([[500, 2], [500, 1]], $calls);
     }
+
+    public function testOrderLinesAreSortedBySortOrderThenByCreation(): void
+    {
+        $collection = $this->collection([]);
+        $collection->method('addFieldToFilter')->willReturnSelf();
+        $orders = [];
+        $collection->method('setOrder')->willReturnCallback(
+            function (string $field, string $direction) use (&$orders, $collection) {
+                $orders[] = [$field, $direction];
+
+                return $collection;
+            }
+        );
+
+        $this->repository->getOrderLines(500);
+
+        $this->assertSame([['sort_order', 'ASC'], ['entity_id', 'ASC']], $orders);
+    }
+
+    public function testItemAmountsReadItemRowsOnlyAndSkipRowsWithoutRule(): void
+    {
+        $collection = $this->collection([
+            ['order_item_id' => '901', 'rule_id' => null, 'amount' => '9.0000', 'base_amount' => '9.0000'],
+            ['order_item_id' => '901', 'rule_id' => '1', 'amount' => '0.1234', 'base_amount' => '0.2468'],
+            ['order_item_id' => '901', 'rule_id' => '1', 'amount' => '0.0001', 'base_amount' => '0.0001'],
+        ]);
+        $filters = [];
+        $collection->method('addFieldToFilter')->willReturnCallback(
+            function (string $field, $cond) use (&$filters, $collection) {
+                $filters[$field] = $cond;
+
+                return $collection;
+            }
+        );
+
+        $amounts = $this->repository->getItemAmounts(500);
+
+        $this->assertSame(['order_id' => ['eq' => 500], 'order_item_id' => ['notnull' => true]], $filters);
+        $this->assertSame([901 => [1 => ['amount' => 0.1235, 'base_amount' => 0.2469]]], $amounts);
+    }
 }
