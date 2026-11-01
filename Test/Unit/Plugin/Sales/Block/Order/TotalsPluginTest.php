@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PixelPerfect\DiscountLines\Test\Unit\Plugin\Sales\Block\Order;
 
 use Magento\Framework\DataObject;
+use Magento\Framework\Phrase;
 use Magento\Sales\Block\Order\Totals;
 use Magento\Sales\Model\Order;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -372,5 +373,210 @@ class TotalsPluginTest extends TestCase
     public function testUninitialisedBlockResultIsPassedThrough(): void
     {
         $this->assertNull($this->plugin->afterGetTotals($this->block, null));
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function blockFor(mixed $id, array $data = []): Totals&MockObject
+    {
+        $order = $this->createMock(Order::class);
+        $order->method('getId')->willReturn($id);
+        $order->method('getStoreId')->willReturn(1);
+        $order->method('getData')->willReturnCallback(static fn($key = '') => $data[$key] ?? null);
+        $block = $this->createMock(Totals::class);
+        $block->method('getSource')->willReturn($order);
+
+        return $block;
+    }
+
+    private function pluginWith(
+        ?ConfigInterface $config = null,
+        ?DiscountLineRepositoryInterface $repository = null,
+        ?LoggerInterface $logger = null
+    ): TotalsPlugin {
+        return new TotalsPlugin(
+            $config ?? $this->config,
+            $repository ?? $this->repository,
+            $this->salesLines,
+            new DocumentLineLabel(),
+            $logger ?? $this->createMock(LoggerInterface::class)
+        );
+    }
+
+    private function silentLogger(): LoggerInterface&MockObject
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->never())->method('error');
+
+        return $logger;
+    }
+
+    public function testUninitialisedBlockResultLogsNothing(): void
+    {
+        $this->assertNull($this->pluginWith(logger: $this->silentLogger())->afterGetTotals($this->block, null));
+    }
+
+    public function testDisabledStoreNeitherLoadsLinesNorLogs(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('isEnabled')->with(1)->willReturn(false);
+        $repository = $this->createMock(DiscountLineRepositoryInterface::class);
+        $repository->expects($this->never())->method('hasLines');
+        $this->salesLines->expects($this->never())->method('getLines');
+        $core = $this->coreTotals();
+
+        $result = $this->pluginWith($config, $repository, $this->silentLogger())->afterGetTotals($this->block, $core);
+
+        $this->assertSame($core, $result);
+    }
+
+    public function testOrderWithoutStoredLinesLogsNothing(): void
+    {
+        $repository = $this->createMock(DiscountLineRepositoryInterface::class);
+        $repository->method('hasLines')->with(42)->willReturn(false);
+        $plugin = $this->pluginWith(repository: $repository, logger: $this->silentLogger());
+        $core = $this->coreTotals();
+        $without = $this->totalsWithoutDiscount();
+
+        $this->assertSame($core, $plugin->afterGetTotals($this->block, $core));
+        $this->assertSame($without, $plugin->afterGetTotals($this->block, $without));
+    }
+
+    public function testFailureIsLoggedWithTheException(): void
+    {
+        $exception = new \RuntimeException('boom');
+        $this->salesLines->method('getLines')->willThrowException($exception);
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('error')
+            ->with('Discount lines: totals rendering failed, core rows kept.', ['exception' => $exception]);
+
+        $this->pluginWith(logger: $logger)->afterGetTotals($this->block, $this->coreTotals());
+    }
+
+    public function testOrderIdIsReadAsInteger(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_COUPON, 5, 'SAVE10', 'SAVE10', 12.0, 24.0, 0),
+        ]);
+
+        $result = $this->plugin->afterGetTotals($this->blockFor('42'), $this->coreTotals());
+
+        $this->assertSame(['subtotal', 'pp_discount_line_0', 'shipping', 'grand_total'], array_keys($result));
+        $this->assertSame(-12.0, $result['pp_discount_line_0']->getValue());
+        $this->assertSame(-24.0, $result['pp_discount_line_0']->getBaseValue());
+    }
+
+    public function testSourceWithoutOrderIdIsNotLookedUp(): void
+    {
+        $repository = $this->createMock(DiscountLineRepositoryInterface::class);
+        $repository->expects($this->never())->method('hasLines');
+        $core = $this->coreTotals();
+
+        $this->assertSame($core, $this->pluginWith(repository: $repository)->afterGetTotals($this->blockFor(0), $core));
+    }
+
+    public function testRowCodesAreNumberedByPositionWhateverTheLineKeys(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            5 => new DiscountLine(DiscountLineInterface::KIND_COUPON, 5, 'SAVE10', 'SAVE10', 10.0, 10.0, 0),
+            9 => new DiscountLine(DiscountLineInterface::KIND_AUTOMATIC, 6, null, 'Summer sale', 2.0, 2.0, 1),
+        ]);
+
+        $result = $this->plugin->afterGetTotals($this->block, $this->coreTotals());
+
+        $this->assertSame(
+            ['subtotal', 'pp_discount_line_0', 'pp_discount_line_1', 'shipping', 'grand_total'],
+            array_keys($result)
+        );
+        $this->assertSame('pp_discount_line_1', $result['pp_discount_line_1']->getCode());
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function emptyDescriptionProvider(): array
+    {
+        return ['no description' => [null], 'empty description' => ['']];
+    }
+
+    /**
+     * @dataProvider emptyDescriptionProvider
+     */
+    public function testShippingLabelIsLeftAloneWithoutADiscountDescription(mixed $description): void
+    {
+        $this->salesLines->method('getLines')->willReturn([]);
+        $core = $this->totalsWithShippingLabel('Shipping & Handling ()');
+
+        $result = $this->plugin->afterGetTotals(
+            $this->blockFor(42, ['discount_description' => $description]),
+            $core
+        );
+
+        $this->assertSame('Shipping & Handling ()', $result['shipping']->getData('label'));
+    }
+
+    public function testRuleDescriptionIsRemovedFromAPhraseShippingLabel(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([]);
+        $core = $this->totalsWithoutDiscount();
+        $core['shipping']->setData('label', new Phrase('Shipping & Handling (%1)', ['INTERNAL description']));
+
+        $result = $this->plugin->afterGetTotals(
+            $this->blockFor(42, ['discount_description' => 'INTERNAL description']),
+            $core
+        );
+
+        $this->assertSame('Shipping & Handling', $result['shipping']->getData('label'));
+    }
+
+    /**
+     * @return array<string, array{float, float, float, bool}>
+     */
+    public static function insertProvider(): array
+    {
+        return [
+            'epsilon amount counts as zero' => [0.00001, 0.0, 0.0, true],
+            'epsilon base amount counts as zero' => [0.0, 0.00001, 0.0, true],
+            'epsilon document discount counts as zero' => [0.0, 0.0, -0.00001, true],
+            'base money only is a money line' => [0.0, 2.0, 0.0, false],
+            'order-currency money only is a money line' => [2.0, 0.0, 0.0, false],
+        ];
+    }
+
+    /**
+     * @dataProvider insertProvider
+     */
+    public function testRowsAreInsertedOnlyForZeroLinesOfAZeroDiscountDocument(
+        float $amount,
+        float $base,
+        float $documentDiscount,
+        bool $inserted
+    ): void {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', $amount, $base, 0),
+        ]);
+        $core = $this->totalsWithoutDiscount();
+
+        $result = $this->plugin->afterGetTotals(
+            $this->blockFor(42, ['discount_amount' => $documentDiscount]),
+            $core,
+            ''
+        );
+
+        $expected = $inserted ? ['subtotal', 'shipping', 'pp_discount_line_0', 'grand_total'] : array_keys($core);
+        $this->assertSame($expected, array_keys($result));
+    }
+
+    public function testRowsAreAppendedWithoutTaxOrGrandTotalRow(): void
+    {
+        $this->salesLines->method('getLines')->willReturn([
+            new DiscountLine(DiscountLineInterface::KIND_GIFT, 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0, 0),
+        ]);
+        $core = ['subtotal' => new DataObject(['code' => 'subtotal', 'value' => 100.0, 'label' => 'Subtotal'])];
+
+        $result = $this->plugin->afterGetTotals($this->block, $core, '');
+
+        $this->assertSame(['subtotal', 'pp_discount_line_0'], array_keys($result));
     }
 }
