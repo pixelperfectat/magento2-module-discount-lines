@@ -77,9 +77,6 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
      */
     private function forOrder(Order $order, array $lines): array
     {
-        if ($lines === []) {
-            return [];
-        }
         $target = round(abs((float)$order->getData('discount_amount')), 2);
         $baseTarget = round(abs((float)$order->getData('base_discount_amount')), 2);
         $sum = 0.0;
@@ -116,9 +113,6 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
         if ($hasMoney !== $hasTarget) {
             return [];
         }
-        if (!$hasTarget) {
-            return $lines;
-        }
 
         return $this->splitter->split($lines, $target, $baseTarget);
     }
@@ -137,10 +131,8 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
         $itemAmounts = $this->repository->getItemAmounts($orderId);
         $docDiscount = abs((float)$document->getData('discount_amount'));
         $docBaseDiscount = abs((float)$document->getData('base_discount_amount'));
-        $orderDiscount = abs((float)$order->getData('discount_amount'));
-        $share = $orderDiscount > self::EPSILON ? min(1.0, $docDiscount / $orderDiscount) : 0.0;
-        $baseOrderDiscount = abs((float)$order->getData('base_discount_amount'));
-        $baseShare = $baseOrderDiscount > self::EPSILON ? min(1.0, $docBaseDiscount / $baseOrderDiscount) : 0.0;
+        $share = $this->share($docDiscount, abs((float)$order->getData('discount_amount')));
+        $baseShare = $this->share($docBaseDiscount, abs((float)$order->getData('base_discount_amount')));
         $perRule = $this->documentRuleAmounts($document, $itemAmounts);
 
         $result = [];
@@ -167,7 +159,7 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
 
         // Zero lines (gift, free shipping) stay on orders and invoices, but not on credit memos.
         $keepZero = !$document instanceof Creditmemo;
-        $result = array_values(array_filter($result, static fn(DiscountLineInterface $line): bool => (
+        $result = array_filter($result, static fn(DiscountLineInterface $line): bool => (
             $line->getAmount() > 0.0
             || $line->getBaseAmount() > 0.0
             || (
@@ -178,13 +170,21 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
                     true
                 )
             )
-        )));
-
-        if ($result === []) {
-            return [];
-        }
+        ));
 
         return $this->scaleTo($result, $docDiscount, $docBaseDiscount);
+    }
+
+    /**
+     * The part's share of the whole, capped at 1; zero when the whole is zero.
+     *
+     * @param float $part
+     * @param float $whole
+     * @return float
+     */
+    private function share(float $part, float $whole): float
+    {
+        return $whole > self::EPSILON ? min(1.0, $part / $whole) : 0.0;
     }
 
     /**
@@ -199,16 +199,16 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
         $perRule = [];
         foreach ($document->getItems() as $item) {
             $orderItem = $item->getOrderItem();
-            $orderItemId = (int)$item->getOrderItemId();
-            $parentId = (int)$orderItem->getParentItemId();
-            if (!isset($itemAmounts[$orderItemId]) || ($parentId > 0 && isset($itemAmounts[$parentId]))) {
+            $orderItemId = $item->getOrderItemId();
+            $parentId = $orderItem->getParentItemId();
+            if (!isset($itemAmounts[$orderItemId]) || ($parentId !== null && isset($itemAmounts[$parentId]))) {
                 continue;
             }
             $ordered = (float)$orderItem->getQtyOrdered();
             if ($ordered <= 0.0) {
                 continue;
             }
-            $ratio = (float)$item->getQty() / $ordered;
+            $ratio = $item->getQty() / $ordered;
             foreach ($itemAmounts[$orderItemId] as $ruleId => $amounts) {
                 $perRule[$ruleId] ??= ['amount' => 0.0, 'base_amount' => 0.0];
                 $perRule[$ruleId]['amount'] += $amounts['amount'] * $ratio;
@@ -253,14 +253,14 @@ class SalesDiscountLines implements SalesDiscountLinesInterface
         AbstractModel $order
     ): ?DiscountLineInterface {
         $orderShipping = (float)$order->getData('shipping_amount');
-        $docShipping = (float)$document->getData('shipping_amount');
         if ($orderShipping <= self::EPSILON) {
             return $document instanceof Creditmemo ? null : $line;
         }
+        $docShipping = (float)$document->getData('shipping_amount');
         if ($docShipping <= self::EPSILON) {
             return null;
         }
-        $ratio = min(1.0, $docShipping / $orderShipping);
+        $ratio = $this->share($docShipping, $orderShipping);
 
         return $line->withAmounts(round($line->getAmount() * $ratio, 2), round($line->getBaseAmount() * $ratio, 2));
     }
