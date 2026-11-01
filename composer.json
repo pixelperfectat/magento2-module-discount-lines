@@ -16,7 +16,7 @@
     "require-dev": {
         "infection/infection": "^0.35",
         "phpunit/phpunit": "^9.6",
-        "pixelperfectat/coding-standard": "^0.2.1"
+        "pixelperfectat/coding-standard": "^0.2.2"
     },
     "suggest": {
         "pixelperfectat/magento2-module-discount-lines-hyva-theme": "Discount lines on the Hyvä default theme cart page",
