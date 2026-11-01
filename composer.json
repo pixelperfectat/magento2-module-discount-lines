@@ -16,7 +16,7 @@
     "require-dev": {
         "infection/infection": "^0.35",
         "phpunit/phpunit": "^9.6",
-        "pixelperfectat/coding-standard": "^0.1.0"
+        "pixelperfectat/coding-standard": "^0.2.1"
     },
     "autoload": {
         "files": [

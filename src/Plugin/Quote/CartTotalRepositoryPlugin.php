@@ -58,7 +58,7 @@ class CartTotalRepositoryPlugin
      * @param TotalsInterface $result
      * @param int|string $cartId
      * @return TotalsInterface
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
     public function afterGet(CartTotalRepositoryInterface $subject, TotalsInterface $result, $cartId): TotalsInterface
     {
