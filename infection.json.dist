@@ -1,0 +1,28 @@
+{
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "source": {
+        "directories": [
+            "src/Api",
+            "src/Exception",
+            "src/Model",
+            "src/Observer",
+            "src/Plugin",
+            "src/Service",
+            "src/ViewModel"
+        ],
+        "excludes": [
+            "ResourceModel/DiscountLineRecord.php",
+            "ResourceModel/DiscountLineRecord/Collection.php",
+            "DiscountLineRecord.php"
+        ]
+    },
+    "mutators": {
+        "@default": true
+    },
+    "minMsi": 85,
+    "minCoveredMsi": 90,
+    "testFramework": "phpunit",
+    "logs": {
+        "text": "var/infection.log"
+    }
+}

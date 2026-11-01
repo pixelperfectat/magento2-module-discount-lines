@@ -1,0 +1,8 @@
+.worktrees/
+.claude/
+.idea/
+vendor/
+/.phpunit.result.cache
+/composer.lock
+*.sync-conflict-*
+var/

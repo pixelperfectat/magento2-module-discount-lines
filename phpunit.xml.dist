@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         colors="true"
+         backupGlobals="false">
+    <coverage>
+        <include>
+            <directory suffix=".php">src/Api</directory>
+            <directory suffix=".php">src/Exception</directory>
+            <directory suffix=".php">src/Model</directory>
+            <directory suffix=".php">src/Observer</directory>
+            <directory suffix=".php">src/Plugin</directory>
+            <directory suffix=".php">src/Service</directory>
+            <directory suffix=".php">src/ViewModel</directory>
+        </include>
+    </coverage>
+    <testsuites>
+        <testsuite name="unit">
+            <directory suffix="Test.php">Test/Unit</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

@@ -1,0 +1,83 @@
+{
+    "name": "pixelperfectat/magento2-module-discount-lines",
+    "description": "Itemised discount lines (coupon, automatic, gift, free shipping) in cart, checkout and sales documents",
+    "type": "magento2-module",
+    "license": "MIT",
+    "prefer-stable": true,
+    "require": {
+        "magento/framework": "^103.0",
+        "magento/module-quote": "^101.0",
+        "magento/module-sales": "^103.0",
+        "magento/module-sales-rule": "^101.0",
+        "magento/module-store": "^101.0",
+        "magento/module-tax": "^100.0",
+        "php": "^8.3"
+    },
+    "require-dev": {
+        "infection/infection": "^0.35",
+        "phpunit/phpunit": "^9.6",
+        "pixelperfectat/coding-standard": "^0.2.2"
+    },
+    "suggest": {
+        "pixelperfectat/magento2-module-discount-lines-hyva-theme": "Discount lines on the Hyvä default theme cart page",
+        "pixelperfectat/magento2-module-discount-lines-hyva-checkout": "Discount lines in Hyvä Checkout",
+        "pixelperfectat/magento2-module-discount-lines-luma": "Discount lines on the Luma cart and checkout",
+        "pixelperfectat/magento2-module-discount-lines-amasty-promo": "Gift lines for Amasty Free Gift coupons",
+        "pixelperfectat/magento2-module-discount-lines-mageplaza-giftcard": "Masked gift card lines for Mageplaza Gift Card",
+        "pixelperfectat/magento2-module-sales-email": "Modern order and shipment emails that render the discount lines"
+    },
+    "autoload": {
+        "files": [
+            "src/registration.php"
+        ],
+        "psr-4": {
+            "PixelPerfect\\DiscountLines\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PixelPerfect\\DiscountLines\\Test\\": "Test/"
+        }
+    },
+    "scripts": {
+        "lint": "parallel-lint --exclude vendor --exclude generated .",
+        "cs": "phpcs",
+        "cs:fix": "phpcbf",
+        "stan": "phpstan analyse",
+        "test": "phpunit",
+        "infection": "infection --with-uncovered --min-msi=85 --min-covered-msi=90 --threads=max",
+        "ci:validate": "@composer validate --no-check-publish",
+        "check": [
+            "@ci:validate",
+            "@lint",
+            "@cs",
+            "@stan",
+            "@test",
+            "@infection"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "cweagans/composer-patches": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "ergebnis/composer-normalize": true,
+            "infection/extension-installer": true,
+            "laminas/laminas-dependency-plugin": true,
+            "magento/*": true,
+            "php-http/discovery": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://repo.magento.com/"
+        }
+    ],
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        }
+    }
+}
