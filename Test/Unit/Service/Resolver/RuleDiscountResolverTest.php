@@ -59,14 +59,14 @@ class RuleDiscountResolverTest extends TestCase
         return $address;
     }
 
-    private function quote(): Quote
+    private function quote(?string $couponCode = 'LAB-PERCENT-15'): Quote
     {
         $quote = $this->getMockBuilder(Quote::class)
             ->disableOriginalConstructor()
             ->addMethods(['getCouponCode'])
             ->onlyMethods(['getStoreId'])
             ->getMock();
-        $quote->method('getCouponCode')->willReturn('LAB-PERCENT-15');
+        $quote->method('getCouponCode')->willReturn($couponCode);
         $quote->method('getStoreId')->willReturn(1);
 
         return $quote;
@@ -157,8 +157,13 @@ class RuleDiscountResolverTest extends TestCase
         return $address;
     }
 
-    private function item(float $discount, string $ruleIds, bool $hasBreakdown): Quote\Item
-    {
+    private function item(
+        float $discount,
+        string $ruleIds,
+        bool $hasBreakdown,
+        ?float $baseDiscount = null,
+        bool $isChild = false
+    ): Quote\Item {
         $extension = $this->getMockBuilder(ExtensionAttributesInterface::class)
             ->addMethods(['getDiscounts'])
             ->getMockForAbstractClass();
@@ -169,10 +174,10 @@ class RuleDiscountResolverTest extends TestCase
             ->onlyMethods(['getParentItem', 'getExtensionAttributes'])
             ->addMethods(['getDiscountAmount', 'getBaseDiscountAmount', 'getAppliedRuleIds'])
             ->getMock();
-        $item->method('getParentItem')->willReturn(null);
+        $item->method('getParentItem')->willReturn($isChild ? $this->createMock(Quote\Item::class) : null);
         $item->method('getExtensionAttributes')->willReturn($extension);
         $item->method('getDiscountAmount')->willReturn($discount);
-        $item->method('getBaseDiscountAmount')->willReturn($discount);
+        $item->method('getBaseDiscountAmount')->willReturn($baseDiscount ?? $discount);
         $item->method('getAppliedRuleIds')->willReturn($ruleIds);
 
         return $item;
@@ -232,5 +237,142 @@ class RuleDiscountResolverTest extends TestCase
         $this->expectException(UnattributableDiscountException::class);
 
         $resolver->resolve($address, $this->quote());
+    }
+
+    private function anyRuleResolves(): void
+    {
+        $this->ruleLoader->method('load')->willReturnCallback(fn (int $id) => $this->rule($id));
+        $this->labelResolver->method('resolve')
+            ->willReturn(['kind' => 'automatic', 'code' => null, 'label' => 'Sale']);
+    }
+
+    /**
+     * @param \PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface[] $lines
+     * @return array<int, array{int|null, float, float}>
+     */
+    private function summary(array $lines): array
+    {
+        return array_map(
+            static fn($line): array => [$line->getRuleId(), $line->getAmount(), $line->getBaseAmount()],
+            $lines
+        );
+    }
+
+    public function testEntriesOfOneRuleAreMergedIntoOneLine(): void
+    {
+        $this->anyRuleResolves();
+        // core adds the shipping part of an apply-to-shipping rule as a separate entry
+        $address = $this->address([$this->discount(1, -2.0, -4.0), $this->discount(1, -0.5, -1.0)]);
+
+        $this->assertSame([[1, 2.5, 5.0]], $this->summary($this->resolver->resolve($address, $this->quote())));
+    }
+
+    public function testAmountsAreRoundedToCents(): void
+    {
+        $this->anyRuleResolves();
+        $address = $this->address([$this->discount(1, -2.2549, -1.6667)]);
+
+        $this->assertSame([[1, 2.25, 1.67]], $this->summary($this->resolver->resolve($address, $this->quote())));
+    }
+
+    public function testRuleWithBaseAmountOnlyStillGetsALine(): void
+    {
+        $this->anyRuleResolves();
+        $address = $this->address([$this->discount(1, 0.0, -0.01)]);
+
+        $this->assertSame([[1, 0.0, 0.01]], $this->summary($this->resolver->resolve($address, $this->quote())));
+    }
+
+    public function testZeroAndUnknownRulesDoNotStopTheFollowingRules(): void
+    {
+        $this->ruleLoader->method('load')->willReturnCallback(fn (int $id) => $id === 8 ? null : $this->rule($id));
+        $this->labelResolver->method('resolve')
+            ->willReturn(['kind' => 'automatic', 'code' => null, 'label' => 'Sale']);
+        $address = $this->address([
+            $this->discount(7, 0.0, 0.0),
+            $this->discount(8, -1.0, -1.0),
+            $this->discount(9, -2.0, -2.0),
+        ]);
+
+        $lines = $this->resolver->resolve($address, $this->quote());
+
+        $this->assertSame([[9, 2.0, 2.0]], $this->summary($lines));
+        $this->assertSame(0, $lines[0]->getSortOrder());
+    }
+
+    /**
+     * @return array<string, array{string|null}>
+     */
+    public static function couponProvider(): array
+    {
+        return ['with coupon' => ['SAVE10'], 'without coupon' => [null]];
+    }
+
+    /**
+     * @dataProvider couponProvider
+     */
+    public function testQuoteCouponAndStoreArePassedToTheLabelResolver(?string $couponCode): void
+    {
+        $rule = $this->rule(1);
+        $this->ruleLoader->method('load')->with(1)->willReturn($rule);
+        $this->labelResolver->expects($this->once())->method('resolve')
+            ->with($this->identicalTo($rule), $this->identicalTo($couponCode), 1)
+            ->willReturn(['kind' => 'automatic', 'code' => null, 'label' => 'Sale']);
+
+        $this->resolver->resolve($this->address([$this->discount(1, -1.0, -1.0)]), $this->quote($couponCode));
+    }
+
+    public function testItemWithoutBreakdownAddsItsBaseAmountToTheRule(): void
+    {
+        $this->anyRuleResolves();
+        $address = $this->addressWithItems(
+            [$this->discount(2, -3.0, -6.0)],
+            [$this->item(3.0, '2', true, 6.0), $this->item(1.5, '2', false, 3.0)]
+        );
+
+        $this->assertSame([[2, 4.5, 9.0]], $this->summary($this->resolver->resolve($address, $this->quote())));
+    }
+
+    public function testChildItemsAreLeftToTheirParent(): void
+    {
+        $this->anyRuleResolves();
+        $address = $this->addressWithItems(
+            [],
+            [$this->item(1.0, '3', false, 1.0, true), $this->item(1.5, '2', false, 3.0)]
+        );
+
+        $this->assertSame([[2, 1.5, 3.0]], $this->summary($this->resolver->resolve($address, $this->quote())));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function appliedRuleIdsProvider(): array
+    {
+        return ['trailing separator' => ['2,'], 'repeated rule' => ['2,2']];
+    }
+
+    /**
+     * @dataProvider appliedRuleIdsProvider
+     */
+    public function testAppliedRuleIdsAreReducedToTheDistinctRules(string $applied): void
+    {
+        $this->anyRuleResolves();
+        $address = $this->addressWithItems([], [$this->item(1.5, $applied, false, 3.0)]);
+
+        $this->assertSame([[2, 1.5, 3.0]], $this->summary($this->resolver->resolve($address, $this->quote())));
+    }
+
+    public function testAttributorReceivesTheAppliedRulesAsAList(): void
+    {
+        $this->anyRuleResolves();
+        $attributor = $this->createMock(\PixelPerfect\DiscountLines\Api\Service\ItemRuleAttributorInterface::class);
+        $attributor->expects($this->once())->method('attribute')
+            ->with($this->anything(), $this->identicalTo([1, 2]))
+            ->willReturn(2);
+        $resolver = new RuleDiscountResolver($this->ruleLoader, $this->labelResolver, [$attributor]);
+        $address = $this->addressWithItems([], [$this->item(1.5, '0,1,2', false)]);
+
+        $this->assertSame([[2, 1.5, 1.5]], $this->summary($resolver->resolve($address, $this->quote())));
     }
 }
