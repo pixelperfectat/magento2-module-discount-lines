@@ -241,22 +241,12 @@ class TotalsPlugin
     /**
      * Rebuild the totals with the rows in place of the core discount row.
      *
-     * Results without a discount row (e.g. the admin footer area) are returned unchanged.
-     *
-     * @param array<int|string, DataObject> $totals
+     * @param array<int|string, DataObject> $totals Totals that contain the core discount row
      * @param array<string, DataObject> $rows
      * @return array<int|string, DataObject>
      */
     private function rebuild(array $totals, array $rows): array
     {
-        $found = false;
-        foreach ($totals as $total) {
-            $found = $found || $total->getCode() === 'discount';
-        }
-        if (!$found) {
-            return $totals;
-        }
-
         $rebuilt = [];
         foreach ($totals as $key => $total) {
             if ($total->getCode() === 'discount') {
