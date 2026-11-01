@@ -24,7 +24,7 @@
                        showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Display Variant</label>
                     <source_model>PixelPerfect\DiscountLines\Model\Config\Source\Variant</source_model>
-                    <comment>Applies to the cart, cart drawer and checkout.</comment>
+                    <comment>Applies to the cart page and checkout.</comment>
                 </field>
             </group>
             <group id="documents" translate="label" type="text" sortOrder="30"
