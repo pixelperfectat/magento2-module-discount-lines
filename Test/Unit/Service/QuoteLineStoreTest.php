@@ -71,4 +71,31 @@ class QuoteLineStoreTest extends TestCase
             $this->assertSame([], $this->store->load($address), var_export($raw, true));
         }
     }
+
+    public function testRowWithANonStringLabelLoadsAsEmpty(): void
+    {
+        $address = $this->address();
+        $address->setData('pp_discount_lines', '[{"kind":"coupon","label":5}]');
+
+        $this->assertSame([], $this->store->load($address));
+    }
+
+    public function testMinimalRowGetsDefaults(): void
+    {
+        $address = $this->address();
+        $address->setData('pp_discount_lines', '[{"kind":"gift","label":"FREEBIE"}]');
+
+        $this->assertEquals([new DiscountLine('gift', null, null, 'FREEBIE', 0.0, 0.0, 0)], $this->store->load($address));
+    }
+
+    public function testScalarFieldsAreNormalisedToTheirTypes(): void
+    {
+        $address = $this->address();
+        $address->setData(
+            'pp_discount_lines',
+            '[{"kind":"coupon","rule_id":"7","code":1234,"label":"1234","amount":"2.5","base_amount":"5","sort_order":"3"}]'
+        );
+
+        $this->assertEquals([new DiscountLine('coupon', 7, '1234', '1234', 2.5, 5.0, 3)], $this->store->load($address));
+    }
 }
