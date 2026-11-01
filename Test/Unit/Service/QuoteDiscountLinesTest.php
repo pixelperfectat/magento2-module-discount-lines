@@ -27,14 +27,14 @@ class QuoteDiscountLinesTest extends TestCase
         $this->service = new QuoteDiscountLines($this->config, $this->resolver);
     }
 
-    private function quote(float $discount): Quote
+    private function quote(float $discount, ?float $baseDiscount = null): Quote
     {
         $address = $this->getMockBuilder(Address::class)
             ->disableOriginalConstructor()
             ->addMethods(['getDiscountAmount', 'getBaseDiscountAmount'])
             ->getMock();
         $address->method('getDiscountAmount')->willReturn($discount);
-        $address->method('getBaseDiscountAmount')->willReturn($discount);
+        $address->method('getBaseDiscountAmount')->willReturn($baseDiscount ?? $discount);
         $quote = $this->getMockBuilder(Quote::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['getStoreId', 'isVirtual', 'getShippingAddress', 'getBillingAddress'])
@@ -228,5 +228,76 @@ class QuoteDiscountLinesTest extends TestCase
 
         // diff 0.00, baseDiff +2.00 beyond the cap
         $this->assertSame([], $this->service->getLines($this->quote(-5.0)));
+    }
+
+    /**
+     * @param \PixelPerfect\DiscountLines\Api\Data\DiscountLineInterface[] $lines
+     * @return array<int, array{int|null, float, float}>
+     */
+    private function summary(array $lines): array
+    {
+        return array_map(
+            static fn($line): array => [$line->getRuleId(), $line->getAmount(), $line->getBaseAmount()],
+            $lines
+        );
+    }
+
+    public function testVirtualQuoteUsesTheBillingAddress(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $shipping = $this->createMock(Address::class);
+        $billing = $this->createMock(Address::class);
+        $quote = $this->getMockBuilder(Quote::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['getStoreId', 'isVirtual', 'getShippingAddress', 'getBillingAddress'])
+            ->getMock();
+        $quote->method('getStoreId')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(true);
+        $quote->method('getShippingAddress')->willReturn($shipping);
+        $quote->method('getBillingAddress')->willReturn($billing);
+        $this->resolver->expects($this->once())->method('resolve')
+            ->with($this->identicalTo($billing), $this->identicalTo($quote))
+            ->willReturn([]);
+
+        $this->service->getLines($quote);
+    }
+
+    public function testNoResolvedLinesGiveNoGenericLineForADiscount(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([]);
+
+        $this->assertSame([], $this->service->getLines($this->quote(-5.0)));
+    }
+
+    public function testFirstOfEquallyLargeLinesAbsorbsTheRoundingDifference(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([
+            new DiscountLine('automatic', 1, null, 'A', 2.0, 4.0),
+            new DiscountLine('automatic', 2, null, 'B', 2.0, 4.0),
+        ]);
+
+        $lines = $this->service->getLines($this->quote(-4.01, -8.01));
+
+        $this->assertSame([[1, 2.01, 4.01], [2, 2.0, 4.0]], $this->summary($lines));
+    }
+
+    public function testBaseRoundingDifferenceAloneIsAbsorbed(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([new DiscountLine('automatic', 1, null, 'A', 2.0, 4.0)]);
+
+        $lines = $this->service->getLines($this->quote(-2.0, -4.01));
+
+        $this->assertSame([[1, 2.0, 4.01]], $this->summary($lines));
+    }
+
+    public function testBaseGapBeyondRoundingFallsBackToTheCoreRow(): void
+    {
+        $this->config->method('isEnabled')->willReturn(true);
+        $this->resolver->method('resolve')->willReturn([new DiscountLine('automatic', 1, null, 'A', 2.0, 4.0)]);
+
+        $this->assertSame([], $this->service->getLines($this->quote(-2.0, -4.04)));
     }
 }
