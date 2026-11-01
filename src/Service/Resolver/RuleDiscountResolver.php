@@ -56,9 +56,6 @@ class RuleDiscountResolver implements DiscountLineResolverInterface
             $perRule[$ruleId][1] += abs((float)$data->getBaseAmount());
         }
         $this->addItemsWithoutBreakdown($address, $perRule);
-        if ($perRule === []) {
-            return [];
-        }
 
         $lines = [];
         foreach ($perRule as $ruleId => [$amount, $baseAmount]) {
