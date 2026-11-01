@@ -165,4 +165,32 @@ class StoreQuoteDiscountLinesTest extends TestCase
 
         $this->observer->execute($this->event($this->quote(false), $address));
     }
+
+    public function testFailuresAreLoggedWithTheirMessageAndException(): void
+    {
+        $address = $this->address(Address::ADDRESS_TYPE_SHIPPING);
+        $collectFailure = new \RuntimeException('boom');
+        $storeFailure = new \RuntimeException('store down');
+        $this->quoteLines->method('getLinesForAddress')->willThrowException($collectFailure);
+        $this->store->method('store')->willThrowException($storeFailure);
+        $logged = [];
+        $this->logger->method('error')->willReturnCallback(
+            static function (string $message, array $context) use (&$logged): void {
+                $logged[] = [$message, $context];
+            }
+        );
+
+        $this->observer->execute($this->event($this->quote(false), $address));
+
+        $this->assertSame(
+            [
+                ['Discount lines could not be stored on the quote address: boom', ['exception' => $collectFailure]],
+                [
+                    'Stale discount lines could not be cleared on the quote address: store down',
+                    ['exception' => $storeFailure],
+                ],
+            ],
+            $logged
+        );
+    }
 }
