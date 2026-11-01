@@ -190,6 +190,10 @@ composer install
 composer check
 ```
 
+`composer check` runs composer validate, PHP lint, PHP_CodeSniffer, PHPStan, PHPUnit and Infection mutation testing
+(fails below MSI 85 or covered-code MSI 90). Infection needs a coverage driver: enable pcov, or Xdebug with
+`XDEBUG_MODE=coverage`. `composer infection` runs the mutation tests on their own.
+
 ## License
 
 MIT, see `LICENSE`.
