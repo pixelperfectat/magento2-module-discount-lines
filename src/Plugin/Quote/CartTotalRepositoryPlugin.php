@@ -132,10 +132,11 @@ class CartTotalRepositoryPlugin
 
         $existing = $totals->getTotalSegments();
         $position = $this->insertionPosition(array_keys($existing), $storeId);
+        // The array union keeps the first occurrence of a key, so the remaining segments follow in their order.
         $totals->setTotalSegments(
             array_slice($existing, 0, $position, true)
             + [self::SEGMENT_CODE => $segment]
-            + array_slice($existing, $position, null, true)
+            + $existing
         );
     }
 
@@ -196,7 +197,7 @@ class CartTotalRepositoryPlugin
         }
         $shipping = array_search('shipping', $codes, true);
 
-        return $shipping !== false ? (int)$shipping : count($codes);
+        return $shipping !== false ? $shipping : count($codes);
     }
 
     /**
