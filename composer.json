@@ -18,6 +18,14 @@
         "phpunit/phpunit": "^9.6",
         "pixelperfectat/coding-standard": "^0.2.1"
     },
+    "suggest": {
+        "pixelperfectat/magento2-module-discount-lines-hyva-theme": "Discount lines on the Hyvä default theme cart page",
+        "pixelperfectat/magento2-module-discount-lines-hyva-checkout": "Discount lines in Hyvä Checkout",
+        "pixelperfectat/magento2-module-discount-lines-luma": "Discount lines on the Luma cart and checkout",
+        "pixelperfectat/magento2-module-discount-lines-amasty-promo": "Gift lines for Amasty Free Gift coupons",
+        "pixelperfectat/magento2-module-discount-lines-mageplaza-giftcard": "Masked gift card lines for Mageplaza Gift Card",
+        "pixelperfectat/magento2-module-sales-email": "Modern order and shipment emails that render the discount lines"
+    },
     "autoload": {
         "files": [
             "src/registration.php"
