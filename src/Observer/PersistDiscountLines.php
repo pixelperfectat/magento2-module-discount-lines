@@ -210,7 +210,7 @@ class PersistDiscountLines implements ObserverInterface
             $diff = round($line->getAmount() - $sum, 2);
             $baseDiff = round($line->getBaseAmount() - $baseSum, 2);
             $cap = self::ROUNDING_STEP * $count + 1e-9;
-            if (($diff !== 0.0 || $baseDiff !== 0.0) && abs($diff) <= $cap && abs($baseDiff) <= $cap) {
+            if (abs($diff) <= $cap && abs($baseDiff) <= $cap) {
                 $itemAmounts[$largest][$ruleId] = [
                     round($itemAmounts[$largest][$ruleId][0] + $diff, 2),
                     round($itemAmounts[$largest][$ruleId][1] + $baseDiff, 2),
