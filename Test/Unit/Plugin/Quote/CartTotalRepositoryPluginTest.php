@@ -73,6 +73,8 @@ class CartTotalRepositoryPluginTest extends TestCase
         );
         $this->segmentFactory = new TotalSegmentInterfaceFactory(function (): TotalSegmentInterface {
             $segment = $this->segment(0.0);
+            $segment->expects($this->once())->method('setCode')->with('discount');
+            $segment->expects($this->once())->method('setValue')->with(0.0);
             $this->created[] = $segment;
 
             return $segment;
@@ -351,5 +353,191 @@ class CartTotalRepositoryPluginTest extends TestCase
 
         $this->assertSame($totals, $this->process($totals));
         $this->assertNull($discount->getExtensionAttributes());
+    }
+
+    /**
+     * Plugin over a given quote and totals sort configuration.
+     */
+    private function pluginFor(Quote $quote, mixed $sortConfig = null): CartTotalRepositoryPlugin
+    {
+        $repository = $this->createMock(CartRepositoryInterface::class);
+        $repository->method('getActive')->with(7)->willReturn($quote);
+        $scopeConfig = $this->createMock(ScopeConfigInterface::class);
+        $scopeConfig->method('getValue')->with('sales/totals_sort', 'store', 1)->willReturn($sortConfig);
+
+        return new CartTotalRepositoryPlugin(
+            $repository,
+            $this->config,
+            $this->store,
+            new TotalSegmentExtensionFactory(),
+            $this->logger,
+            $this->segmentFactory,
+            $scopeConfig
+        );
+    }
+
+    /**
+     * @return array<string, array{bool, string}>
+     */
+    public static function addressProvider(): array
+    {
+        return [
+            'physical quote reads the shipping address' => [false, 'shipping'],
+            'virtual quote reads the billing address' => [true, 'billing'],
+        ];
+    }
+
+    /**
+     * @dataProvider addressProvider
+     */
+    public function testLinesAreReadFromTheAddressThatCarriesTheTotals(bool $virtual, string $expected): void
+    {
+        $shipping = $this->createMock(Address::class);
+        $billing = $this->createMock(Address::class);
+        $quote = $this->getMockBuilder(Quote::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['isVirtual', 'getShippingAddress', 'getBillingAddress', 'getStoreId'])
+            ->getMock();
+        $quote->method('isVirtual')->willReturn($virtual);
+        $quote->method('getShippingAddress')->willReturn($shipping);
+        $quote->method('getBillingAddress')->willReturn($billing);
+        $quote->method('getStoreId')->willReturn(1);
+        $this->store->expects($this->once())->method('load')
+            ->with($this->identicalTo($expected === 'shipping' ? $shipping : $billing))
+            ->willReturn($this->twoLines());
+        $discount = $this->segment(-5.56);
+
+        $this->pluginFor($quote)->afterGet(
+            $this->createMock(CartTotalRepositoryInterface::class),
+            $this->totals(['discount' => $discount]),
+            '7'
+        );
+
+        $this->assertSame('Discount (CODE, Sale)', $discount->getTitle());
+    }
+
+    public function testFailureIsLoggedWithItsMessageAndException(): void
+    {
+        $exception = new \RuntimeException('boom');
+        $this->store->method('load')->willThrowException($exception);
+        $this->logger->expects($this->once())->method('error')
+            ->with('Discount lines could not be added to the cart totals: boom', ['exception' => $exception]);
+
+        $this->process($this->totals(['discount' => $this->segment(-2.0)]));
+    }
+
+    public function testInsertingTheMissingSegmentLogsNoError(): void
+    {
+        $this->store->method('load')->willReturn([new DiscountLine('gift', 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0)]);
+        $this->logger->expects($this->never())->method('error');
+        $totals = $this->totals(['subtotal' => $this->segment(100.0)]);
+
+        $this->process($totals);
+
+        $this->assertSame(['subtotal', 'discount'], array_keys($totals->getTotalSegments()));
+    }
+
+    /**
+     * @return array<string, array{float, float}>
+     */
+    public static function centMatchProvider(): array
+    {
+        return [
+            'segment with a sub-cent remainder' => [3.33, -5.564],
+            'lines with a sub-cent remainder' => [3.334, -5.56],
+        ];
+    }
+
+    /**
+     * @dataProvider centMatchProvider
+     */
+    public function testLinesMatchingTheSegmentToTheCentAreShown(float $couponAmount, float $segmentValue): void
+    {
+        $discount = $this->segment($segmentValue);
+        $this->store->method('load')->willReturn([
+            new DiscountLine('coupon', 1, 'CODE', 'CODE', $couponAmount, $couponAmount),
+            new DiscountLine('automatic', 2, null, 'Sale', 2.23, 2.23),
+        ]);
+
+        $this->process($this->totals(['discount' => $discount]));
+
+        $this->assertSame('Discount (CODE, Sale)', $discount->getTitle());
+    }
+
+    /**
+     * @return array<string, array{float, float, bool}>
+     */
+    public static function zeroLineProvider(): array
+    {
+        return [
+            'epsilon amount counts as zero' => [0.00001, 0.0, true],
+            'epsilon base amount counts as zero' => [0.0, 0.00001, true],
+            'base money only is a money line' => [0.0, 2.0, false],
+            'order-currency money only is a money line' => [2.0, 0.0, false],
+        ];
+    }
+
+    /**
+     * @dataProvider zeroLineProvider
+     */
+    public function testOnlyZeroLinesInBothCurrenciesGetAMissingSegment(float $amount, float $base, bool $added): void
+    {
+        $this->store->method('load')->willReturn([new DiscountLine('gift', 9, 'FREEBIE', 'FREEBIE', $amount, $base)]);
+        $totals = $this->totals(['subtotal' => $this->segment(100.0)]);
+
+        $this->process($totals);
+
+        $this->assertSame($added ? ['subtotal', 'discount'] : ['subtotal'], array_keys($totals->getTotalSegments()));
+    }
+
+    public function testMissingSegmentFollowsTheConfiguredTotalsOrder(): void
+    {
+        $this->store->method('load')->willReturn([new DiscountLine('gift', 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0)]);
+        $totals = $this->totals([
+            'subtotal' => $this->segment(100.0),
+            'shipping' => $this->segment(5.0),
+            'tax' => $this->segment(19.0),
+            'grand_total' => $this->segment(124.0),
+        ]);
+        $sort = ['subtotal' => '10', 'shipping' => '30', 'tax' => '35', 'discount' => '35', 'grand_total' => '100'];
+
+        $this->pluginFor($this->quote, $sort)->afterGet(
+            $this->createMock(CartTotalRepositoryInterface::class),
+            $totals,
+            7
+        );
+
+        $this->assertSame(
+            ['subtotal', 'shipping', 'tax', 'discount', 'grand_total'],
+            array_keys($totals->getTotalSegments())
+        );
+    }
+
+    public function testMissingSegmentIsAppendedWithoutSortConfigAndShipping(): void
+    {
+        $this->store->method('load')->willReturn([new DiscountLine('gift', 9, 'FREEBIE', 'FREEBIE', 0.0, 0.0)]);
+        $totals = $this->totals(['subtotal' => $this->segment(100.0), 'grand_total' => $this->segment(100.0)]);
+
+        $this->pluginFor($this->quote, 'not an array')->afterGet(
+            $this->createMock(CartTotalRepositoryInterface::class),
+            $totals,
+            7
+        );
+
+        $this->assertSame(['subtotal', 'grand_total', 'discount'], array_keys($totals->getTotalSegments()));
+    }
+
+    public function testCouponsShowTheirCodeAndEverythingElseItsLabel(): void
+    {
+        $discount = $this->segment(-6.0);
+        $this->store->method('load')->willReturn([
+            new DiscountLine('coupon', 1, 'SAVE10', 'Save ten', 1.0, 1.0),
+            new DiscountLine('automatic', 2, 'AUTO', 'Sale', 2.0, 2.0),
+            new DiscountLine('coupon', 3, null, 'Coupon', 3.0, 3.0),
+        ]);
+
+        $this->process($this->totals(['discount' => $discount]));
+
+        $this->assertSame('Discount (SAVE10, Sale, Coupon)', $discount->getTitle());
     }
 }
